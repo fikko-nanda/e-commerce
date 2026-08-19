@@ -1,6 +1,37 @@
-# 📚 Daftar Menu - Endpoint API E-Commerce Platform
+# 📚 API Documentation - E-Commerce Backend
 
-Hai teman! Berikut adalah daftar endpoint API yang sudah kita buat untuk platform e-commerce:
+## 🔧 **Frontend Integration Setup**
+
+### Base URLs (Development):
+```
+HTTP API: http://localhost:8000/api/v1/
+WebSocket: ws://localhost:8000/ws/chat/{room_name}/
+Admin Panel: http://localhost:8000/admin/
+```
+
+### CORS Configuration Required:
+Backend harus diatur CORS di `settings.py`:
+
+```python
+# config/settings.py
+CORS_ALLOWED_ORIGINS = [
+    "http://localhost:3000",  # React/Vite default port
+    "http://localhost:5173",  # Vue/Nuxt default port  
+    "http://localhost:8080",  # Angular default port
+]
+
+# Atau untuk development saja (temporary):
+# CORS_ALLOW_ALL_ORIGINS = True
+```
+
+### Authentication Header:
+Semua endpoint yang memerlukan login menggunakan JWT token:
+```javascript
+headers: {
+  'Authorization': 'Bearer YOUR_ACCESS_TOKEN',
+  'Content-Type': 'application/json'
+}
+```
 
 ---
 
