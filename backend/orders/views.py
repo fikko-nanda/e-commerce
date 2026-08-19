@@ -18,7 +18,10 @@ class CheckoutView(APIView):
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
         data = serializer.validated_data
-        product = Product.objects.get(id=data['product_id'])
+        try:
+            product = Product.objects.get(id=data['product_id'])
+        except Product.DoesNotExist:
+            return Response({'error': 'Produk tidak ditemukan.'}, status=status.HTTP_404_NOT_FOUND)
         
         if product.stock < data['quantity']:
             return Response({'error': 'Stok produk tidak mencukupi.'}, status=status.HTTP_400_BAD_REQUEST)
@@ -116,10 +119,13 @@ class MidtransWebhookView(APIView):
             else:
                 order.payment_status = Order.PaymentStatus.PAID
         elif transaction_status in ['cancel', 'deny', 'expire']:
+            # Hanya kembalikan stok JIKA status sebelumnya belum FAILED
+            # Mencegah stok bertambah berulang kali saat terjadi multiple webhook retry
+            if order.payment_status != Order.PaymentStatus.FAILED:
+                order.product.stock += order.quantity
+                order.product.save()
+
             order.payment_status = Order.PaymentStatus.FAILED
-            # Kembalikan stok produk jika gagal/batal
-            order.product.stock += order.quantity
-            order.product.save()
         elif transaction_status == 'pending':
             order.payment_status = Order.PaymentStatus.PENDING
 
