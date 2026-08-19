@@ -1,45 +1,81 @@
-from rest_framework.views import APIView
+from rest_framework import generics, permissions, status, serializers
 from rest_framework.response import Response
-from rest_framework import status, permissions
-from django.core.cache import cache
-from .models import Product
-from .serializers import ProductSerializer
+from django.db.models import Q
+from stores.models import Store
+from products.models import Product
+from reviews.models import Review
+from products.serializers import (
+    ProductCreateSerializer, 
+    ProductSimpleSerializer, 
+    ProductDetailSerializer
+)
 
 
-class ProductListCreateView(APIView):
+class ProductListCreateView(generics.ListCreateAPIView):
+    queryset = Product.objects.filter(is_active=True).select_related('store')
+    serializer_class = ProductSimpleSerializer
 
     def get_permissions(self):
-        if self.request.method == 'GET':
-            return [permissions.AllowAny()]
-        return [permissions.IsAuthenticated()]
+        if self.request.method == 'POST':
+            self.permission_classes = [permissions.IsAuthenticated]
+        else:
+            self.permission_classes = [permissions.AllowAny]
+        return super().get_permissions()
 
-    def get(self, request):
-        cache_key = 'product_list_active'
-        cached_data = cache.get(cache_key)
+    def get_serializer_class(self):
+        if self.request.method == 'POST':
+            return ProductCreateSerializer
+        return ProductSimpleSerializer
 
-        # Cek jika cache tidak None (termasuk jika nilainya list kosong [])
-        if cached_data is not None:
-            return Response({'source': 'cache', 'data': cached_data}, status=status.HTTP_200_OK)
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        context['request'] = self.request
+        return context
 
-        products = Product.objects.filter(is_active=True, stock__gt=0).select_related('store')
-        serializer = ProductSerializer(products, many=True)
+    def get_queryset(self):
+        queryset = Product.objects.filter(is_active=True).select_related('store')
+
+        # ?mine=true -> hanya produk dari toko user yang login (seller dashboard)
+        if self.request.query_params.get('mine') and self.request.user.is_authenticated:
+            queryset = queryset.filter(store__user=self.request.user)
+
+        category = self.request.query_params.get('category')
+        if category:
+            queryset = queryset.filter(category__iexact=category)
+
+        search = self.request.query_params.get('name', '')
+        if search:
+            queryset = queryset.filter(name__icontains=search)
+
+        return queryset
+    
+    def perform_create(self, serializer):
+        user = self.request.user
         
-        # Simpan ke cache selama 60 detik (meskipun data masih kosong)
-        cache.set(cache_key, serializer.data, timeout=60)
+        if not hasattr(user, 'store'):
+            raise serializers.ValidationError({
+                'error': 'Anda harus menjadi seller terlebih dahulu untuk membuat produk'
+            })
+        
+        serializer.save()
 
-        return Response({'source': 'database', 'data': serializer.data}, status=status.HTTP_200_OK)
 
-    def post(self, request):
-        if not hasattr(request.user, 'store'):
-            return Response({'error': 'Hanya pemilik toko yang dapat menambahkan produk.'}, status=status.HTTP_403_FORBIDDEN)
+class ProductDetailView(generics.RetrieveUpdateDestroyAPIView):
+    """Single product detail view"""
+    queryset = Product.objects.select_related('store')
+    serializer_class = ProductDetailSerializer
 
-        serializer = ProductSerializer(data=request.data)
-        if serializer.is_valid():
-            serializer.save(store=request.user.store)
-            
-            # Invalidasi cache saat ada produk baru
-            cache.delete('product_list_active')
 
-            return Response({'status': 'success', 'data': serializer.data}, status=status.HTTP_201_CREATED)
-
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+class ProductCreateView(generics.CreateAPIView):
+    permission_classes = [permissions.IsAuthenticated]
+    serializer_class = ProductCreateSerializer
+    
+    def perform_create(self, serializer):
+        user = self.request.user
+        try:
+            store = Store.objects.get(user=user)
+            serializer.save(store=store)
+        except Store.DoesNotExist:
+            raise serializers.ValidationError({
+                'error': 'Anda belum memiliki toko. Silakan daftar sebagai seller terlebih dahulu.'
+            })

@@ -33,13 +33,18 @@ export default function UserDashboard() {
             <div key={order.id} className="bg-white border-4 border-black p-6 shadow-brutal flex flex-col md:flex-row justify-between md:items-center gap-4">
               <div>
                 <span className="text-[10px] font-mono font-black bg-black text-white px-2 py-0.5 uppercase tracking-widest">
-                  ID: #{order.id}
+                  ID: #{order.id.slice(0, 8)}
                 </span>
-                <h4 className="font-black text-lg uppercase mt-2">Produk ID: {order.product}</h4>
+                <h4 className="font-black text-lg uppercase mt-2">{order.product_name}</h4>
                 <p className="text-xs font-bold text-gray-600">
-                  Jumlah: {order.quantity} pcs | Total: <span className="font-black text-black">Rp {Number(order.total_price).toLocaleString('id-ID')}</span>
+                  {order.store_name} | Jumlah: {order.quantity} pcs | Total: <span className="font-black text-black">Rp {Number(order.total_price).toLocaleString('id-ID')}</span>
                 </p>
-                <p className="text-xs font-bold text-gray-500 mt-1">Alamat: {order.shipping_address}</p>
+                <p className="text-xs font-bold text-gray-500 mt-1">
+                  Pembayaran: <span className={`font-black uppercase ${
+                    order.payment_status === 'paid' ? 'text-green-600' :
+                    order.payment_status === 'pending' ? 'text-yellow-600' : 'text-red-600'
+                  }`}>{order.payment_status}</span>
+                </p>
               </div>
 
               <div className="flex items-center gap-3">

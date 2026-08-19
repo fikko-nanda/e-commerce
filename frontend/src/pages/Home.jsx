@@ -4,7 +4,7 @@ import ProductCard from '../components/ProductCard';
 import MarqueeBanner from '../components/MarqueeBanner';
 import CategoryFilter from '../components/CategoryFilter';
 
-// Data Dummy Contoh Produk
+// Data Dummy Contoh Produk jika API Kosong / Error
 const DUMMY_PRODUCTS = [
   { id: 1, name: 'OVERSIZED T-SHIRT BLACK VOL. 01', price: 189000, stock: 12, store_name: 'WARMART IND', category: 'tshirt' },
   { id: 2, name: 'HEAVYWEIGHT HOODIE RED NEON', price: 349000, stock: 3, store_name: 'URBAN CORE', category: 'hoodie' },
@@ -18,32 +18,36 @@ export default function Home() {
   const [selectedCategory, setSelectedCategory] = useState('all');
 
   useEffect(() => {
-    fetchProducts();
-  }, [selectedCategory]);
+    let isMounted = true;
 
-  const fetchProducts = () => {
-    setLoading(true);
     let url = '/products/';
     if (selectedCategory !== 'all') {
       url += `?category=${selectedCategory}`;
     }
 
+    // Ambil data produk
     API.get(url)
       .then((res) => {
-        const dataList = Array.isArray(res.data) 
-          ? res.data 
-          : (Array.isArray(res.data?.results) ? res.data.results : []);
+        if (!isMounted) return;
+        const rawData = res.data?.data || res.data;
+        const dataList = Array.isArray(rawData) 
+          ? rawData 
+          : (Array.isArray(rawData?.results) ? rawData.results : []);
 
-        // Gunakan data API jika ada, jika kosong gunakan DUMMY_PRODUCTS
         setProducts(dataList.length > 0 ? dataList : DUMMY_PRODUCTS);
-        setLoading(false);
       })
       .catch(() => {
-        // Jika API error/backend mati, tampilkan DUMMY_PRODUCTS
+        if (!isMounted) return;
         setProducts(DUMMY_PRODUCTS);
-        setLoading(false);
+      })
+      .finally(() => {
+        if (isMounted) setLoading(false);
       });
-  };
+
+    return () => {
+      isMounted = false;
+    };
+  }, [selectedCategory]);
 
   const filteredProducts = selectedCategory === 'all' 
     ? products 
@@ -81,7 +85,10 @@ export default function Home() {
 
           <CategoryFilter 
             selectedCategory={selectedCategory} 
-            onSelectCategory={setSelectedCategory} 
+            onSelectCategory={(cat) => {
+              setLoading(true); // Pemicu loading dipindah ke aksi user saat ganti kategori
+              setSelectedCategory(cat);
+            }} 
           />
 
           {loading ? (

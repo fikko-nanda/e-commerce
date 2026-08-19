@@ -10,7 +10,7 @@ class Review(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='reviews')
     product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name='reviews')
-    order = models.OneToOneField(Order, on_delete=models.CASCADE, related_name='review')
+    order = models.OneToOneField(Order, on_delete=models.CASCADE, related_name='review', null=True, blank=True)
     rating = models.PositiveSmallIntegerField(
         validators=[MinValueValidator(1), MaxValueValidator(5)]
     )

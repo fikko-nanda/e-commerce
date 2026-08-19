@@ -17,32 +17,64 @@ export default function CheckoutModal({ product, isOpen, onClose, onSuccess }) {
     setLoading(true);
 
     try {
-      const response = await API.post('/orders/', {
-        product: product.id,
+      const response = await API.post('/orders/checkout/', {
+        product_id: product.id,
         quantity: Number(quantity),
         payment_method: paymentMethod,
         shipping_address: shippingAddress,
       });
 
-      setLoading(false);
+      if (!response.data) {
+        throw new Error('Respons server kosong');
+      }
 
-      if (paymentMethod === 'midtrans' && response.data.snap_token) {
-        payWithMidtrans(
-          response.data.snap_token,
-          () => {
-            alert('Pembayaran Berhasil!');
-            onSuccess();
-            onClose();
-          },
-          () => alert('Pembayaran Gagal!')
-        );
+      if (paymentMethod === 'midtrans') {
+        const snapToken = response.data.snap_token;
+        
+        if (!snapToken) {
+          // Midtrans gagal generate token - fallback ke COD atau alert user
+          alert(response.data.message || 
+                'Midtrans payment gateway belum aktif. Silakan kontak admin.');
+          onSuccess();
+          onClose();
+          return;
+        }
+        
+        setLoading(false);
+        
+        try {
+          await payWithMidtrans(
+            snapToken,
+            () => {
+              alert('Pembayaran Berhasil!');
+              onSuccess();
+              onClose();
+            },
+            () => {
+              alert('Pembayaran Gagal atau dibatalkan');
+              setLoading(false);
+            }
+          );
+        } catch (err) {
+          console.error('Snap error:', err);
+          alert('Gagal membuka popup pembayaran: ' + err.message);
+          setLoading(false);
+        }
       } else {
-        alert('Pesanan berhasil dibuat!');
+        // COD / transfer bank manual
+        alert(response.data.message || 'Pesanan berhasil dibuat!');
         onSuccess();
         onClose();
       }
     } catch (err) {
-      alert(err.response?.data?.detail || 'Gagal membuat pesanan.');
+      const msg = err.response?.data?.detail ||
+        err.response?.data?.error ||
+        err.response?.data?.[0] ||
+        err.message ||
+        'Gagal membuat pesanan.';
+      
+      console.error('Checkout error:', err);
+      alert(typeof msg === 'string' ? msg : JSON.stringify(msg));
       setLoading(false);
     }
   };
@@ -85,7 +117,7 @@ export default function CheckoutModal({ product, isOpen, onClose, onSuccess }) {
               className="w-full bg-gray-50 border-2 border-black p-2.5 font-bold text-sm focus:outline-none"
             >
               <option value="midtrans">Midtrans Gateway (QRIS/Gopay/Transfer)</option>
-              <option value="bank_transfer">Transfer Bank Manual</option>
+              <option value="cod">Cash On Delivery (COD)</option>
             </select>
           </div>
 

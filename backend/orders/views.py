@@ -1,133 +1,146 @@
-import hashlib
-import midtransclient
+import logging
 from django.conf import settings
-from rest_framework.views import APIView
+from rest_framework import generics, permissions, status
+from rest_framework.decorators import action
 from rest_framework.response import Response
-from rest_framework import status, permissions
-from products.models import Product
-from .models import Order
-from .serializers import OrderCreateSerializer, OrderDetailSerializer
+from orders.models import Order
+from orders.serializers import OrderCreateSerializer, OrderDetailSerializer, OrderListSerializer
+
+logger = logging.getLogger(__name__)
 
 
-class CheckoutView(APIView):
+class CheckoutView(generics.CreateAPIView):
+    """Create new order/checkout"""
     permission_classes = [permissions.IsAuthenticated]
+    serializer_class = OrderCreateSerializer
 
-    def post(self, request):
-        serializer = OrderCreateSerializer(data=request.data)
-        if not serializer.is_valid():
-            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
 
-        data = serializer.validated_data
         try:
-            product = Product.objects.get(id=data['product_id'])
-        except Product.DoesNotExist:
-            return Response({'error': 'Produk tidak ditemukan.'}, status=status.HTTP_404_NOT_FOUND)
-        
-        if product.stock < data['quantity']:
-            return Response({'error': 'Stok produk tidak mencukupi.'}, status=status.HTTP_400_BAD_REQUEST)
+            order = serializer.save()
+        except Exception as e:
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Hitung Total Harga
-        total_price = product.price * data['quantity']
+        response_data = {
+            'order_id': order.id,
+            'message': 'Order berhasil dibuat'
+        }
 
-        # 1. Buat Record Order di DB
-        order = Order.objects.create(
-            buyer=request.user,
-            store=product.store,
-            product=product,
-            quantity=data['quantity'],
-            total_price=total_price,
-            payment_method=data['payment_method'],
-            payment_status=Order.PaymentStatus.PENDING
-        )
+        # Generate Midtrans Snap token untuk pembayaran via gateway
+        if order.payment_method == 'midtrans':
+            snap_token = self._create_snap_token(order)
+            if snap_token:
+                response_data['snap_token'] = snap_token
+            else:
+                response_data['message'] = (
+                    'Order dibuat, tetapi token pembayaran Midtrans gagal digenerate. '
+                    'Pastikan MIDTRANS_SERVER_KEY dan MIDTRANS_CLIENT_KEY sudah diisi di .env'
+                )
 
-        # Potong stok produk
-        product.stock -= data['quantity']
-        product.save()
+        return Response(response_data, status=status.HTTP_201_CREATED)
 
-        # 2. Jika Payment Method = Midtrans, Generate Snap Token
-        snap_token = None
-        redirect_url = None
+    def _create_snap_token(self, order):
+        """Generate Snap token via Midtrans API. Return None kalau gagal."""
+        from midtransclient import Snap
 
-        if data['payment_method'] == Order.PaymentMethod.MIDTRANS:
-            snap = midtransclient.Snap(
+        if not (settings.MIDTRANS_SERVER_KEY and settings.MIDTRANS_CLIENT_KEY):
+            return None
+
+        try:
+            snap = Snap(
                 is_production=settings.MIDTRANS_IS_PRODUCTION,
-                server_key=settings.MIDTRANS_SERVER_KEY
+                server_key=settings.MIDTRANS_SERVER_KEY,
+                client_key=settings.MIDTRANS_CLIENT_KEY,
             )
 
             param = {
                 "transaction_details": {
                     "order_id": str(order.id),
-                    "gross_amount": int(total_price)
+                    "gross_amount": int(order.total_price),
+                },
+                "credit_card": {
+                    "secure": True
                 },
                 "customer_details": {
-                    "email": request.user.email,
-                    "first_name": request.user.username,
+                    "first_name": order.buyer.username,
+                    "email": order.buyer.email,
                 },
                 "item_details": [{
-                    "id": str(product.id),
-                    "price": int(product.price),
-                    "quantity": data['quantity'],
-                    "name": product.name[:50]
-                }]
+                    "id": str(order.product.id),
+                    "price": int(order.product.price),
+                    "quantity": order.quantity,
+                    "name": order.product.name[:50],
+                }],
             }
 
-            try:
-                transaction = snap.create_transaction(param)
-                snap_token = transaction['token']
-                redirect_url = transaction['redirect_url']
-            except Exception as e:
-                return Response({'error': f'Midtrans Error: {str(e)}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-        return Response({
-            'status': 'success',
-            'order': OrderDetailSerializer(order).data,
-            'snap_token': snap_token,
-            'redirect_url': redirect_url
-        }, status=status.HTTP_201_CREATED)
+            transaction = snap.create_transaction(param)
+            return transaction['token']
+        except Exception:
+            logger.exception('Gagal generate Snap token untuk order %s', order.id)
+            return None
 
 
-class MidtransWebhookView(APIView):
-    permission_classes = [permissions.AllowAny]  # Harus public agar Midtrans bisa memanggil
+class MyOrdersView(generics.ListAPIView):
+    """Get all orders by current buyer"""
+    permission_classes = [permissions.IsAuthenticated]
+    serializer_class = OrderListSerializer
+    
+    def get_queryset(self):
+        user = self.request.user
+        if hasattr(user, 'store'):
+            # If user is seller, show their store's orders
+            return Order.objects.filter(store=user.store).select_related('product', 'store')
+        else:
+            # Regular buyer
+            return Order.objects.filter(buyer=user).select_related('product', 'store')
 
-    def post(self, request):
-        data = request.data
+
+class StoreOrdersView(generics.ListAPIView):
+    """Get orders from seller's store"""
+    permission_classes = [permissions.IsAuthenticated]
+    serializer_class = OrderListSerializer
+    
+    def get_queryset(self):
+        user = self.request.user
+        if hasattr(user, 'store'):
+            return Order.objects.filter(store=user.store).select_related('product', 'store')
+        return Order.objects.none()
+
+
+class OrderDetailView(generics.RetrieveAPIView):
+    """Get single order detail"""
+    queryset = Order.objects.select_related('product', 'store', 'buyer')
+    serializer_class = OrderDetailSerializer
+
+
+class CancelOrderView(generics.UpdateAPIView):
+    """Cancel order by buyer (if not paid)"""
+    queryset = Order.objects.all()
+    serializer_class = OrderDetailSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def update(self, request, *args, **kwargs):
+        order = self.get_object()
         
-        order_id = data.get('order_id')
-        status_code = data.get('status_code')
-        gross_amount = data.get('gross_amount')
-        signature_key = data.get('signature_key')
-        transaction_status = data.get('transaction_status')
-        fraud_status = data.get('fraud_status')
-
-        # 1. Validasi Signature Key demi Keamanan
-        raw_signature = f"{order_id}{status_code}{gross_amount}{settings.MIDTRANS_SERVER_KEY}"
-        calc_signature = hashlib.sha512(raw_signature.encode('utf-8')).hexdigest()
-
-        if calc_signature != signature_key:
-            return Response({'error': 'Invalid Signature Key'}, status=status.HTTP_400_BAD_REQUEST)
-
-        # 2. Cari Order di Database
-        try:
-            order = Order.objects.get(id=order_id)
-        except Order.DoesNotExist:
-            return Response({'error': 'Order ID tidak ditemukan'}, status=status.HTTP_404_NOT_FOUND)
-
-        # 3. Update Status Pembayaran
-        if transaction_status in ['capture', 'settlement']:
-            if fraud_status == 'challenge':
-                order.payment_status = Order.PaymentStatus.PENDING
-            else:
-                order.payment_status = Order.PaymentStatus.PAID
-        elif transaction_status in ['cancel', 'deny', 'expire']:
-            # Hanya kembalikan stok JIKA status sebelumnya belum FAILED
-            # Mencegah stok bertambah berulang kali saat terjadi multiple webhook retry
-            if order.payment_status != Order.PaymentStatus.FAILED:
-                order.product.stock += order.quantity
-                order.product.save()
-
-            order.payment_status = Order.PaymentStatus.FAILED
-        elif transaction_status == 'pending':
-            order.payment_status = Order.PaymentStatus.PENDING
-
+        # Check ownership
+        if order.buyer != request.user and not hasattr(request.user, 'store'):
+            return Response({'error': 'Anda tidak bisa cancel order ini'}, 
+                          status=status.HTTP_403_FORBIDDEN)
+        
+        # Can only cancel pending orders
+        if order.payment_status != 'PENDING':
+            return Response({'error': 'Tidak bisa cancel order yang sudah dibayar'},
+                          status=status.HTTP_400_BAD_REQUEST)
+        
+        # Mark as cancelled
+        order.payment_status = 'EXPIRED'
+        order.shipping_status = 'PENDING'
         order.save()
-        return Response({'status': 'OK'}, status=status.HTTP_200_OK)
+        
+        # Restore stock
+        order.product.stock += order.quantity
+        order.product.save()
+        
+        return Response({'message': 'Order berhasil dibatalkan'})
