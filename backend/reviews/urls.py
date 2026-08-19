@@ -1,6 +1,11 @@
-from django.urls import path
-from .views import ProductReviewListCreateView
+from django.urls import path, include
+from rest_framework.routers import DefaultRouter
+from .views import ReviewViewSet
+
+router = DefaultRouter()
+# Ubah r'reviews' menjadi r''
+router.register(r'', ReviewViewSet, basename='review')
 
 urlpatterns = [
-    path('products/<uuid:product_id>/', ProductReviewListCreateView.as_view(), name='product-reviews'),
+    path('', include(router.urls)),
 ]

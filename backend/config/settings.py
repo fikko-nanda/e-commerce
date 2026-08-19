@@ -11,6 +11,7 @@ https://docs.djangoproject.com/en/5.1/ref/settings/
 """
 import os
 from pathlib import Path
+from datetime import timedelta
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -64,6 +65,8 @@ CHANNEL_LAYERS = {
 }
 AUTH_USER_MODEL = 'users.User'
 
+
+
 MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
@@ -115,7 +118,8 @@ CACHES = {
         "LOCATION": "unique-snowflake",
     }
 }
-MIDTRANS_SERVER_KEY = "Mid-server-AFGnS1usNYRICJEqY3M8g0Z4"  # Ganti dengan Server Key dari Dashboard Midtrans
+MIDTRANS_SERVER_KEY = os.getenv('MIDTRANS_SERVER_KEY', '')
+MIDTRANS_CLIENT_KEY = os.getenv('MIDTRANS_CLIENT_KEY', '')# Ganti dengan Server Key dari Dashboard Midtrans
 MIDTRANS_IS_PRODUCTION = False
 # Password validation
 # https://docs.djangoproject.com/en/5.1/ref/settings/#auth-password-validators
@@ -141,7 +145,7 @@ AUTH_PASSWORD_VALIDATORS = [
 
 LANGUAGE_CODE = 'en-us'
 
-TIME_ZONE = 'UTC'
+TIME_ZONE = 'Asia/Jakarta'
 
 USE_I18N = True
 
