@@ -1,10 +1,31 @@
 # E-Commerce Backend (Django)
 
-## Quick Start Commands
+## Setup & Quick Start
+
 ```bash
 cd backend
-python manage.py migrate          # Run migrations
-python manage.py runserver        # Start dev server
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1      # Windows PowerShell activation
+pip install -r requirements.txt
+python manage.py migrate
+```
+
+### Running the Application
+
+**HTTP Server (development):**
+```bash
+python manage.py runserver       # Port 8000 default
+```
+
+**WebSocket Server (separate terminal required):**
+```bash
+daphne -b 127.0.0.1 -p 8000 config.asgi:application
+```
+⚠️ Both servers bind to port 8000 by default - run in separate terminals.
+
+**Admin User:**
+```bash
+python manage.py createsuperuser
 ```
 
 ## Architecture Overview
@@ -41,21 +62,36 @@ python manage.py runserver        # Start dev server
 5. **Midtrans Integration**: Server key configured in settings (`MIDTRANS_SERVER_KEY`), currently in test mode
 
 ## API Structure
-```
-/api/v1/auth/    → users.urls (GoogleAuthView)
-/api/v1/stores/  → stores.urls (RegisterSellerView)  
-/api/v1/products/→ products.urls
-/api/v1/orders/  → orders.urls
-/admin/          → Django admin (requires superuser via createsuperuser)
+
+Base: `/api/v1/` | WebSocket: `ws://localhost:8000/ws/chat/{room_name}/`
+
+| Endpoint | Method | Auth | Notes |
+|----------|--------|------|-------|
+| `/auth/google-auth/` | POST | ❌ | Google OAuth simulation / instant login |
+| `/stores/register-seller/` | POST | ✅ | Auto-approval if phone starts with '08' & >=10 chars |
+| `/products/` | GET,POST,PUT,DELETE | ⚠️ | CRUD products (partial auth) |
+| `/orders/` | GET,POST,PUT | ✅ | Order management with Midtrans/COD |
+| `/reviews/` | GET,POST | ✅ | Only on purchased products (paid orders) |
+| `/admin/` | - | ✅ Admin | Django admin interface |
+
+Full API reference with curl examples: `API_DOCUMENTATION.md` (299 lines)
+
+## Testing
+
+```bash
+python manage.py test <app_name>  # e.g., python manage.py test users, stores, products
 ```
 
-## Testing Notes
-- Each app has its own `tests.py` module
-- No pytest or custom fixtures detected - standard Django test client used
-- Tests run via: `python manage.py test <app_name>`
+- Each app uses standard Django test framework (`tests.py`)
+- No pytest, Jest, or custom fixtures - Django test client only
+- All models use UUID primary keys (not integers)
 
-## Environment/Setup Requirements
-- Python 3.12+
-- Virtual environment at `.venv`
-- PostgreSQL instance running locally on port 5432 with user `postgres`
-- Docker not detected - no containerized setup
+## Environment & Requirements
+
+- **Python**: 3.12+
+- **Database**: PostgreSQL `db_ecommerce` @ localhost:5432 (user: `postgres`)
+- **Redis**: Required for production WebSocket channel layer (dev uses in-memory)
+- **Environment vars**: See `backend/.env` for DB credentials, Midtrans keys, SECRET_KEY
+- **Frontend**: Currently non-existent (empty `dsd/` directory)
+
+⚠️ `.env` contains sensitive data (DB passwords, API keys). Verify access before sharing.

@@ -1,35 +1,48 @@
-# ==========================================
-# Environment Variables & Secrets (PostgreSQL Credentials)
-# ==========================================
-.env
-.env.*
-!.env.example
-
-# ==========================================
-# Python & Django (Backend)
-# ==========================================
-venv/
-backend/venv/
-*.pyc
-__pycache__/
-media/
-staticfiles/
-
-# ==========================================
-# Node.js & Frontend
-# ==========================================
-node_modules/
-frontend/node_modules/
-.next/
-build/
+# Python
+*.py[cod]
+*$py.class
+*.so
+*.egg
+*.egg-info/
 dist/
-npm-debug.log*
-yarn-debug.log*
+build/
+venv/
+env/
+.venv/
 
-# ==========================================
-# IDE & System Files
-# ==========================================
+# Django
+*.log
+local_settings.py
+db.sqlite3
+db.sqlite3-journal
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# IDE
 .vscode/
 .idea/
+*.swp
+*.swo
+*~
+
+# macOS
 .DS_Store
-Thumbs.db
+
+# Testing
+.coverage
+htmlcov/
+.pytest_cache/
+.tox/
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# Sensitive data
+*.key
+*.pem
+secrets.json
