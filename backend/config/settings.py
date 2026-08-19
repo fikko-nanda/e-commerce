@@ -12,20 +12,28 @@ https://docs.djangoproject.com/en/5.1/ref/settings/
 import os
 from pathlib import Path
 from datetime import timedelta
+from dotenv import load_dotenv
+from django.core.exceptions import ImproperlyConfigured
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
-
+load_dotenv(BASE_DIR / '.env')
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.1/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = os.getenv('SECRET_KEY', 'default-key-jika-env-tidak-ada')
-# SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = os.getenv('DEBUG', 'True').lower() == 'true'
+SECRET_KEY = os.getenv('SECRET_KEY')
+if not SECRET_KEY:
+    import warnings
+    warnings.warn("SECRET_KEY tidak diset!")
+    if DEBUG:
+        SECRET_KEY = 'dev-only-key-change-immediately'
+    else:
+        raise ImproperlyConfigured("SECRET_KEY must be set when DEBUG=False")
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', '').split(',') if os.getenv('ALLOWED_HOSTS') else ['*']
 
 
 # Application definition
@@ -105,11 +113,11 @@ WSGI_APPLICATION = 'config.wsgi.application'
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
-        'NAME': 'db_ecommerce',
-        'USER': 'postgres',
-        'PASSWORD': '12345678',
-        'HOST': 'localhost',
-        'PORT': '5432',
+        'NAME': os.getenv('DB_NAME', 'db_ecommerce'),
+        'USER': os.getenv('DB_USER', 'postgres'),
+        'PASSWORD': os.getenv('DB_PASSWORD', ''),
+        'HOST': os.getenv('DB_HOST', 'localhost'),
+        'PORT': os.getenv('DB_PORT', '5432'),
     }
 }
 CACHES = {
@@ -118,9 +126,18 @@ CACHES = {
         "LOCATION": "unique-snowflake",
     }
 }
-MIDTRANS_SERVER_KEY = os.getenv('MIDTRANS_SERVER_KEY', '')
-MIDTRANS_CLIENT_KEY = os.getenv('MIDTRANS_CLIENT_KEY', '')# Ganti dengan Server Key dari Dashboard Midtrans
+MIDTRANS_SERVER_KEY = os.getenv('MIDTRANS_SERVER_KEY')
+MIDTRANS_CLIENT_KEY = os.getenv('MIDTRANS_CLIENT_KEY')
+if not (MIDTRANS_SERVER_KEY and MIDTRANS_CLIENT_KEY) and DEBUG:
+    import warnings
+    warnings.warn("Midtrans keys tidak diset! Payment akan gagal")
 MIDTRANS_IS_PRODUCTION = False
+
+# Google OAuth 2.0 (Google Identity Services)
+GOOGLE_CLIENT_ID = os.getenv('GOOGLE_CLIENT_ID')
+if not GOOGLE_CLIENT_ID and DEBUG:
+    import warnings
+    warnings.warn("GOOGLE_CLIENT_ID tidak diset! Login Google akan menolak semua token")
 # Password validation
 # https://docs.djangoproject.com/en/5.1/ref/settings/#auth-password-validators
 
@@ -166,7 +183,4 @@ REST_FRAMEWORK = {
         'rest_framework_simplejwt.authentication.JWTAuthentication',
     )
 }
-CORS_ALLOWED_ORIGINS = [
-    "http://localhost:5173",
-    "http://127.0.0.1:5173",
-]
+CORS_ALLOWED_ORIGINS = os.getenv('CORS_ALLOWED_ORIGINS', 'http://localhost:5173,http://127.0.0.1:5173').split(',')
