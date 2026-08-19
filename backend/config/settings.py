@@ -107,7 +107,7 @@ DATABASES = {
         'ENGINE': 'django.db.backends.postgresql',
         'NAME': 'db_ecommerce',
         'USER': 'postgres',
-        'PASSWORD': 'fikko04',
+        'PASSWORD': '12345678',
         'HOST': 'localhost',
         'PORT': '5432',
     }
@@ -166,10 +166,7 @@ REST_FRAMEWORK = {
         'rest_framework_simplejwt.authentication.JWTAuthentication',
     )
 }
-SIMPLE_JWT = {
-    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=60),     # Token berlaku 1 jam
-    'REFRESH_TOKEN_LIFETIME': timedelta(days=1),        # Refresh token 1 hari
-    'ROTATE_REFRESH_TOKENS': True,
-    'BLACK_LIST_AFTER_ROTATION': True,
-    'AUTH_HEADER_TYPES': ('Bearer',),
-}
+CORS_ALLOWED_ORIGINS = [
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+]
