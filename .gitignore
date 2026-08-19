@@ -1,0 +1,16 @@
+# Python / Virtual Environment
+venv/
+env/
+ENV/
+__pycache__/
+*.pyc
+
+# Database & Storage
+*.sqlite3
+media/
+staticfiles/
+
+# System / Environment Files
+.env
+.DS_Store
+.vscode/
