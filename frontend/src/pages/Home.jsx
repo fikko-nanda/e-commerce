@@ -4,7 +4,6 @@ import ProductCard from '../components/ProductCard';
 import MarqueeBanner from '../components/MarqueeBanner';
 import CategoryFilter from '../components/CategoryFilter';
 
-// Data Dummy Contoh Produk
 const DUMMY_PRODUCTS = [
   { id: 1, name: 'OVERSIZED T-SHIRT BLACK VOL. 01', price: 189000, stock: 12, store_name: 'WARMART IND', category: 'tshirt' },
   { id: 2, name: 'HEAVYWEIGHT HOODIE RED NEON', price: 349000, stock: 3, store_name: 'URBAN CORE', category: 'hoodie' },
@@ -16,6 +15,8 @@ export default function Home() {
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedCategory, setSelectedCategory] = useState('all');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [sortBy, setSortBy] = useState('newest'); // 'newest' | 'low-to-high' | 'high-to-low'
 
   useEffect(() => {
     fetchProducts();
@@ -33,27 +34,32 @@ export default function Home() {
         const dataList = Array.isArray(res.data) 
           ? res.data 
           : (Array.isArray(res.data?.results) ? res.data.results : []);
-
-        // Gunakan data API jika ada, jika kosong gunakan DUMMY_PRODUCTS
         setProducts(dataList.length > 0 ? dataList : DUMMY_PRODUCTS);
         setLoading(false);
       })
       .catch(() => {
-        // Jika API error/backend mati, tampilkan DUMMY_PRODUCTS
         setProducts(DUMMY_PRODUCTS);
         setLoading(false);
       });
   };
 
-  const filteredProducts = selectedCategory === 'all' 
-    ? products 
-    : products.filter(p => p.category === selectedCategory);
+  // Filterberdasarkan Kata Kunci Pencarian & Kategori
+  const filteredProducts = products
+    .filter((p) => selectedCategory === 'all' || p.category === selectedCategory)
+    .filter((p) => p.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+                   (p.store_name && p.store_name.toLowerCase().includes(searchQuery.toLowerCase())))
+    .sort((a, b) => {
+      if (sortBy === 'low-to-high') return Number(a.price) - Number(b.price);
+      if (sortBy === 'high-to-low') return Number(b.price) - Number(a.price);
+      return b.id - a.id;
+    });
 
   return (
     <div className="min-h-screen bg-white">
       <MarqueeBanner />
 
       <div className="max-w-7xl mx-auto px-6 py-12">
+        {/* Banner Hero */}
         <div className="bg-yellow-300 border-4 border-black p-8 md:p-12 shadow-brutal-lg mb-12 flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
           <div className="max-w-xl">
             <span className="bg-black text-white text-[10px] font-black px-2.5 py-1 uppercase tracking-widest inline-block mb-3">
@@ -68,26 +74,67 @@ export default function Home() {
           </div>
           <a 
             href="#katalog" 
-            className="bg-black text-white font-black px-8 py-4 uppercase tracking-widest shadow-brutal hover:bg-red-600 transition"
+            className="bg-black text-white font-black px-8 py-4 uppercase tracking-widest shadow-brutal hover:bg-red-600 transition active:translate-x-0.5 active:translate-y-0.5"
           >
             Jelajahi Sekarang →
           </a>
         </div>
 
+        {/* Section Katalog */}
         <div id="katalog">
           <h2 className="text-3xl font-black uppercase tracking-tighter border-b-4 border-black pb-3">
             Katalog Produk
           </h2>
 
-          <CategoryFilter 
-            selectedCategory={selectedCategory} 
-            onSelectCategory={setSelectedCategory} 
-          />
+          {/* Baris Kontrol: Filter Kategori, Search Bar & Sort */}
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 my-6">
+            <CategoryFilter 
+              selectedCategory={selectedCategory} 
+              onSelectCategory={setSelectedCategory} 
+            />
 
+            <div className="flex flex-col sm:flex-row items-center gap-3">
+              {/* Input Pencarian */}
+              <div className="relative w-full sm:w-64">
+                <input 
+                  type="text" 
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Cari Produk / Toko..." 
+                  className="w-full bg-gray-50 border-2 border-black px-3 py-2 text-xs font-bold focus:outline-none shadow-brutal"
+                />
+                {searchQuery && (
+                  <button 
+                    onClick={() => setSearchQuery('')}
+                    className="absolute right-2 top-2 text-xs font-black text-gray-500 hover:text-black"
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
+
+              {/* Dropdown Sortir */}
+              <select 
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value)}
+                className="w-full sm:w-auto bg-white border-2 border-black px-3 py-2 text-xs font-black uppercase focus:outline-none shadow-brutal cursor-pointer"
+              >
+                <option value="newest">🔥 Rilisan Terbaru</option>
+                <option value="low-to-high">💵 Harga: Murah ke Mahal</option>
+                <option value="high-to-low">💎 Harga: Mahal ke Murah</option>
+              </select>
+            </div>
+          </div>
+
+          {/* Grid Produk */}
           {loading ? (
             <div className="text-center py-20 font-black text-gray-400 uppercase">Memuat Produk...</div>
+          ) : filteredProducts.length === 0 ? (
+            <div className="text-center py-16 bg-gray-100 border-4 border-black font-black text-gray-500 uppercase shadow-brutal">
+              Produk tidak ditemukan. Coba ubah kata kunci pencarian.
+            </div>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6 mt-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
               {filteredProducts.map((item) => (
                 <ProductCard key={item.id} product={item} />
               ))}

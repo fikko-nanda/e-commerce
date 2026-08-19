@@ -1,59 +1,104 @@
-import { useEffect, useState } from 'react';
-import API from '../services/api';
+import { useState, useContext } from 'react';
+import { AuthContext } from '../context/AuthContext';
+import { payWithMidtrans } from '../utils/loadSnap';
+
+const INITIAL_USER_ORDERS = [
+  {
+    id: 'TRX-20260819-001',
+    date: '19 Agu 2026',
+    items: [{ name: 'OVERSIZED T-SHIRT BLACK VOL. 01', qty: 1, price: 189000 }],
+    total: 189000,
+    status: 'MENUNGGU PEMBAYARAN',
+    snapToken: 'SANDBOX-DUMMY-SNAP-TOKEN-1',
+  },
+  {
+    id: 'TRX-20260810-088',
+    date: '10 Agu 2026',
+    items: [{ name: 'CARGO PANTS TACTICAL BLACK', qty: 1, price: 279000 }],
+    total: 279000,
+    status: 'SELESAI',
+    snapToken: null,
+  },
+];
 
 export default function UserDashboard() {
-  const [orders, setOrders] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const { user } = useContext(AuthContext) || {};
+  const [orders, setOrders] = useState(INITIAL_USER_ORDERS);
 
-  useEffect(() => {
-    API.get('/orders/')
-      .then((res) => {
-        const data = Array.isArray(res.data) ? res.data : (res.data?.results || []);
-        setOrders(data);
-        setLoading(false);
-      })
-      .catch(() => setLoading(false));
-  }, []);
+  const handlePay = (order) => {
+    payWithMidtrans(
+      order.snapToken,
+      () => {
+        setOrders(orders.map((o) => (o.id === order.id ? { ...o, status: 'DIBAYAR' } : o)));
+        alert('Pembayaran Sukses!');
+      },
+      () => alert('Pembayaran Gagal. Silakan coba lagi.')
+    );
+  };
 
   return (
-    <div className="max-w-5xl mx-auto px-6 py-12">
-      <h2 className="text-3xl font-black uppercase tracking-tighter border-b-4 border-black pb-4 mb-8">
-        Riwayat Pesanan Saya
+    <div className="max-w-6xl mx-auto px-6 py-10">
+      <div className="bg-yellow-300 border-4 border-black p-6 shadow-brutal-lg mb-8 flex items-center justify-between">
+        <div>
+          <span className="bg-black text-white text-[10px] font-black px-2 py-0.5 uppercase tracking-widest">
+            AKUN PEMBELI
+          </span>
+          <h1 className="text-3xl font-black uppercase tracking-tighter mt-1">
+            {user ? user.email : 'Pengguna Warmart'}
+          </h1>
+        </div>
+        <div className="bg-white border-2 border-black px-4 py-2 font-black text-xs uppercase shadow-brutal">
+          Status: Member Aktif
+        </div>
+      </div>
+
+      <h2 className="text-2xl font-black uppercase tracking-tighter border-b-4 border-black pb-3 mb-6">
+        Riwayat Transaksi
       </h2>
 
-      {loading ? (
-        <div className="text-center py-20 font-black text-gray-400 uppercase">Memuat Riwayat...</div>
-      ) : orders.length === 0 ? (
-        <div className="bg-yellow-100 border-4 border-black p-8 text-center font-black uppercase shadow-brutal">
-          Belum ada riwayat transaksi pesanan.
-        </div>
-      ) : (
-        <div className="space-y-4">
-          {orders.map((order) => (
-            <div key={order.id} className="bg-white border-4 border-black p-6 shadow-brutal flex flex-col md:flex-row justify-between md:items-center gap-4">
+      <div className="space-y-6">
+        {orders.map((ord) => (
+          <div key={ord.id} className="bg-white border-4 border-black p-6 shadow-brutal space-y-4">
+            <div className="flex justify-between items-center border-b-2 border-black pb-3">
               <div>
-                <span className="text-[10px] font-mono font-black bg-black text-white px-2 py-0.5 uppercase tracking-widest">
-                  ID: #{order.id}
-                </span>
-                <h4 className="font-black text-lg uppercase mt-2">Produk ID: {order.product}</h4>
-                <p className="text-xs font-bold text-gray-600">
-                  Jumlah: {order.quantity} pcs | Total: <span className="font-black text-black">Rp {Number(order.total_price).toLocaleString('id-ID')}</span>
-                </p>
-                <p className="text-xs font-bold text-gray-500 mt-1">Alamat: {order.shipping_address}</p>
+                <span className="font-black text-xs uppercase mr-3">{ord.id}</span>
+                <span className="text-xs font-bold text-gray-500">{ord.date}</span>
+              </div>
+              <span className={`text-[10px] font-black px-2 py-1 uppercase border border-black ${
+                ord.status === 'SELESAI' ? 'bg-green-400 text-black' :
+                ord.status === 'MENUNGGU PEMBAYARAN' ? 'bg-yellow-300 text-black' : 'bg-gray-200'
+              }`}>
+                {ord.status}
+              </span>
+            </div>
+
+            <div className="space-y-2">
+              {ord.items.map((it, idx) => (
+                <div key={idx} className="flex justify-between text-xs font-bold">
+                  <span>{it.name} (x{it.qty})</span>
+                  <span>Rp {it.price.toLocaleString('id-ID')}</span>
+                </div>
+              ))}
+            </div>
+
+            <div className="flex justify-between items-center border-t-2 border-black pt-3">
+              <div>
+                <span className="text-[10px] font-black uppercase text-gray-500 block">Total Pembayaran</span>
+                <span className="text-lg font-black">Rp {ord.total.toLocaleString('id-ID')}</span>
               </div>
 
-              <div className="flex items-center gap-3">
-                <span className={`text-xs font-black px-3 py-1.5 border-2 border-black uppercase shadow-brutal ${
-                  order.shipping_status === 'delivered' ? 'bg-green-400' :
-                  order.shipping_status === 'shipped' ? 'bg-blue-400 text-white' : 'bg-yellow-300'
-                }`}>
-                  {order.shipping_status || 'Pending'}
-                </span>
-              </div>
+              {ord.status === 'MENUNGGU PEMBAYARAN' && (
+                <button
+                  onClick={() => handlePay(ord)}
+                  className="bg-black text-white font-black text-xs uppercase px-5 py-2.5 border-2 border-black shadow-brutal hover:bg-green-400 hover:text-black transition"
+                >
+                  Bayar Sekarang 💳
+                </button>
+              )}
             </div>
-          ))}
-        </div>
-      )}
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

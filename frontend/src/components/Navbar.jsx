@@ -6,8 +6,8 @@ import LoginModal from './LoginModal';
 import CartDrawer from './CartDrawer';
 
 export default function Navbar() {
-  const { user, logout } = useContext(AuthContext);
-  const { totalItems } = useContext(CartContext);
+  const { user, logout } = useContext(AuthContext) || {};
+  const { totalItems = 0 } = useContext(CartContext) || {};
   const [isLoginOpen, setIsLoginOpen] = useState(false);
   const [isCartOpen, setIsCartOpen] = useState(false);
 
@@ -19,7 +19,6 @@ export default function Navbar() {
         </Link>
 
         <div className="flex items-center gap-3 md:gap-4">
-          {/* Tombol Pintas ke Seller Dashboard */}
           <Link 
             to="/seller" 
             className="bg-purple-400 font-black text-xs uppercase border-2 border-black px-3 py-2 shadow-brutal hover:bg-black hover:text-white transition"
@@ -29,8 +28,9 @@ export default function Navbar() {
 
           {/* Tombol Keranjang */}
           <button 
+            type="button"
             onClick={() => setIsCartOpen(true)} 
-            className="font-black text-xs uppercase bg-yellow-300 border-2 border-black px-3 py-2 flex items-center gap-2 shadow-brutal"
+            className="font-black text-xs uppercase bg-yellow-300 border-2 border-black px-3 py-2 flex items-center gap-2 shadow-brutal hover:bg-black hover:text-yellow-300 transition cursor-pointer"
           >
             🛒 Keranjang
             {totalItems > 0 && (
@@ -46,7 +46,7 @@ export default function Navbar() {
                 to="/user/dashboard" 
                 className="font-black text-xs uppercase bg-gray-100 border-2 border-black px-3 py-2 shadow-brutal"
               >
-                👤 {user.email.split('@')[0]}
+                👤 {user.email?.split('@')[0]}
               </Link>
               <button 
                 onClick={logout} 
@@ -66,6 +66,7 @@ export default function Navbar() {
         </div>
       </nav>
 
+      {/* Render Drawer & Modal */}
       <LoginModal isOpen={isLoginOpen} onClose={() => setIsLoginOpen(false)} />
       <CartDrawer isOpen={isCartOpen} onClose={() => setIsCartOpen(false)} />
     </>
