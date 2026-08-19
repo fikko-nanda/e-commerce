@@ -1,24 +1,34 @@
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
+import { CartProvider } from './context/CartContext';
 import Navbar from './components/Navbar';
 import Home from './pages/Home';
+import ProductDetail from './pages/ProductDetail';
+import SellerDashboard from './pages/SellerDashboard';
 import UserDashboard from './pages/UserDashboard';
+import ChatDrawer from './components/ChatDrawer';
+import Footer from './components/Footer';
 
-const SellerDashboard = () => <div className="p-8 text-2xl font-bold">Dashboard Penjual</div>;
-
-function App() {
+export default function App() {
   return (
     <AuthProvider>
-      <Router>
-        <Navbar />
-        <Routes>
-          <Route path="/" element={<Home />} />
-          <Route path="/user/dashboard" element={<UserDashboard />} />
-          <Route path="/seller/dashboard" element={<SellerDashboard />} />
-        </Routes>
-      </Router>
+      <CartProvider>
+        <Router>
+          <div className="flex flex-col min-h-screen bg-white">
+            <Navbar />
+            <main className="flex-grow">
+              <Routes>
+                <Route path="/" element={<Home />} />
+                <Route path="/product/:id" element={<ProductDetail />} />
+                <Route path="/seller" element={<SellerDashboard />} />
+                <Route path="/user/dashboard" element={<UserDashboard />} />
+              </Routes>
+            </main>
+            <Footer />
+            <ChatDrawer />
+          </div>
+        </Router>
+      </CartProvider>
     </AuthProvider>
   );
 }
-
-export default App;
