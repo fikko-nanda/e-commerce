@@ -1,65 +1,100 @@
 import { useEffect, useState } from 'react';
 import API from '../services/api';
 import ProductCard from '../components/ProductCard';
+import MarqueeBanner from '../components/MarqueeBanner';
+import CategoryFilter from '../components/CategoryFilter';
+
+// Data Dummy Contoh Produk
+const DUMMY_PRODUCTS = [
+  { id: 1, name: 'OVERSIZED T-SHIRT BLACK VOL. 01', price: 189000, stock: 12, store_name: 'WARMART IND', category: 'tshirt' },
+  { id: 2, name: 'HEAVYWEIGHT HOODIE RED NEON', price: 349000, stock: 3, store_name: 'URBAN CORE', category: 'hoodie' },
+  { id: 3, name: 'CARGO PANTS TACTICAL BLACK', price: 279000, stock: 8, store_name: 'STREET LAB', category: 'pants' },
+  { id: 4, name: 'BUCKET HAT STREETWEAR LOGO', price: 99000, stock: 15, store_name: 'WARMART IND', category: 'accessories' },
+];
 
 export default function Home() {
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [selectedCategory, setSelectedCategory] = useState('all');
 
   useEffect(() => {
-    API.get('/products/')
+    fetchProducts();
+  }, [selectedCategory]);
+
+  const fetchProducts = () => {
+    setLoading(true);
+    let url = '/products/';
+    if (selectedCategory !== 'all') {
+      url += `?category=${selectedCategory}`;
+    }
+
+    API.get(url)
       .then((res) => {
-        // Cek apakah response berupa array langsung atau dikemas di res.data.results (DRF Pagination)
         const dataList = Array.isArray(res.data) 
           ? res.data 
           : (Array.isArray(res.data?.results) ? res.data.results : []);
 
-        setProducts(dataList);
+        // Gunakan data API jika ada, jika kosong gunakan DUMMY_PRODUCTS
+        setProducts(dataList.length > 0 ? dataList : DUMMY_PRODUCTS);
         setLoading(false);
       })
-      .catch((err) => {
-        console.error("Gagal mengambil data produk:", err);
-        setProducts([]); // Jaga-jaga agar tetap array jika API error
+      .catch(() => {
+        // Jika API error/backend mati, tampilkan DUMMY_PRODUCTS
+        setProducts(DUMMY_PRODUCTS);
         setLoading(false);
       });
-  }, []);
+  };
+
+  const filteredProducts = selectedCategory === 'all' 
+    ? products 
+    : products.filter(p => p.category === selectedCategory);
 
   return (
     <div className="min-h-screen bg-white">
-      {/* Hero Banner */}
-      <header className="bg-black text-white relative overflow-hidden">
-        <div className="max-w-7xl mx-auto px-6 py-20 md:py-28 relative z-10 flex flex-col items-start">
-          <span className="bg-red-600 text-white text-xs font-black px-3 py-1 uppercase tracking-widest mb-4">New Drop 🔥</span>
-          <h1 className="text-5xl md:text-7xl font-black uppercase leading-none mb-4 tracking-tighter">
-            Urban Armory Vol. 02
-          </h1>
-          <p className="text-gray-400 max-w-md font-semibold mb-8">
-            Koleksi streetwear terbaru. Siapkan dirimu sebelum kehabisan.
-          </p>
-          <a href="#products" className="bg-white text-black text-sm font-black px-8 py-4 uppercase tracking-widest hover:bg-gray-200 transition">
-            Mulai Belanja
+      <MarqueeBanner />
+
+      <div className="max-w-7xl mx-auto px-6 py-12">
+        <div className="bg-yellow-300 border-4 border-black p-8 md:p-12 shadow-brutal-lg mb-12 flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
+          <div className="max-w-xl">
+            <span className="bg-black text-white text-[10px] font-black px-2.5 py-1 uppercase tracking-widest inline-block mb-3">
+              Koleksi Terbaru 2026
+            </span>
+            <h1 className="text-4xl md:text-6xl font-black uppercase tracking-tighter leading-none mb-4">
+              PANGGUNG STREETWEAR LOKAL.
+            </h1>
+            <p className="text-sm font-bold leading-relaxed text-black/80">
+              Dapatkan produk autentik langsung dari kreator independen terbaik.
+            </p>
+          </div>
+          <a 
+            href="#katalog" 
+            className="bg-black text-white font-black px-8 py-4 uppercase tracking-widest shadow-brutal hover:bg-red-600 transition"
+          >
+            Jelajahi Sekarang →
           </a>
         </div>
-      </header>
 
-      {/* Product List */}
-      <main id="products" className="max-w-7xl mx-auto px-6 py-16">
-        <div className="flex justify-between items-end mb-10 border-b-2 border-black pb-4">
-          <h2 className="text-3xl font-black uppercase tracking-tighter">Katalog Produk</h2>
+        <div id="katalog">
+          <h2 className="text-3xl font-black uppercase tracking-tighter border-b-4 border-black pb-3">
+            Katalog Produk
+          </h2>
+
+          <CategoryFilter 
+            selectedCategory={selectedCategory} 
+            onSelectCategory={setSelectedCategory} 
+          />
+
+          {loading ? (
+            <div className="text-center py-20 font-black text-gray-400 uppercase">Memuat Produk...</div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6 mt-6">
+              {filteredProducts.map((item) => (
+                <ProductCard key={item.id} product={item} />
+              ))}
+            </div>
+          )}
         </div>
-
-        {loading ? (
-          <div className="text-center py-12 font-bold text-gray-500">Memuat produk...</div>
-        ) : products.length === 0 ? (
-          <div className="text-center py-12 text-gray-400 font-bold">Belum ada produk tersedia.</div>
-        ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-8">
-            {products.map((item) => (
-              <ProductCard key={item.id} product={item} />
-            ))}
-          </div>
-        )}
-      </main>
+      </div>
     </div>
   );
 }
