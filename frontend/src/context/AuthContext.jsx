@@ -2,25 +2,32 @@ import { createContext, useState, useEffect } from 'react';
 
 export const AuthContext = createContext();
 
-export const AuthProvider = ({ children }) => {
-  const [user, setUser] = useState(null);
-  const [token, setToken] = useState(localStorage.getItem('access_token') || null);
+export function AuthProvider({ children }) {
+  const [user, setUser] = useState(() => {
+    const savedUser = localStorage.getItem('warmart_user');
+    return savedUser ? JSON.parse(savedUser) : null;
+  });
 
-  const login = (accessToken, userData) => {
-    localStorage.setItem('access_token', accessToken);
-    setToken(accessToken);
+  useEffect(() => {
+    if (user) {
+      localStorage.setItem('warmart_user', JSON.stringify(user));
+    } else {
+      localStorage.removeItem('warmart_user');
+    }
+  }, [user]);
+
+  const login = (userData) => {
     setUser(userData);
   };
 
   const logout = () => {
-    localStorage.removeItem('access_token');
-    setToken(null);
     setUser(null);
+    localStorage.removeItem('warmart_user');
   };
 
   return (
-    <AuthContext.Provider value={{ user, token, login, logout }}>
+    <AuthContext.Provider value={{ user, login, logout }}>
       {children}
     </AuthContext.Provider>
   );
-};
+}
