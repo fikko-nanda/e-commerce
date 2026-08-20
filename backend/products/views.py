@@ -70,11 +70,13 @@ class ProductListCreateView(APIView):
 
 
 class ProductDetailView(APIView):
+    # Set default permission ke AllowAny agar DRF tidak memblokir di awal saat tidak ada token
+    permission_classes = [permissions.AllowAny]
 
     def get_permissions(self):
-        if self.request.method == 'GET':
-            return [permissions.AllowAny()]
-        return [permissions.IsAuthenticated()]
+        if self.request.method in ['PUT', 'PATCH', 'DELETE']:
+            return [permissions.IsAuthenticated()]
+        return [permissions.AllowAny()]
 
     def get_object(self, pk):
         return get_object_or_404(Product.objects.select_related('store'), pk=pk)

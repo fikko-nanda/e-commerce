@@ -29,8 +29,18 @@ export default function Navbar() {
         </Link>
 
         <div className="flex items-center gap-3 md:gap-4">
-          <Link 
-            to="/seller" 
+          {/* Mode Admin — hanya muncul untuk role admin */}
+          {user?.role === 'admin' && (
+            <Link
+              to="/admin"
+              className="bg-red-500 text-white font-black text-xs uppercase border-2 border-black px-3 py-2 shadow-brutal hover:bg-black transition"
+            >
+              🛡️ Admin
+            </Link>
+          )}
+
+          <Link
+            to="/seller"
             className="bg-purple-400 font-black text-xs uppercase border-2 border-black px-3 py-2 shadow-brutal hover:bg-black hover:text-white transition"
           >
             🏬 Mode Penjual

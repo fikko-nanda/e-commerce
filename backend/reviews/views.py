@@ -5,7 +5,7 @@ from .serializers import ReviewSerializer
 
 
 class ReviewViewSet(viewsets.ModelViewSet):
-    queryset = Review.objects.all().select_related('user', 'product', 'order')
+    queryset = Review.objects.all().select_related('user', 'product', 'product__store', 'order')
     serializer_class = ReviewSerializer
 
     def get_permissions(self):
@@ -27,7 +27,8 @@ class ReviewViewSet(viewsets.ModelViewSet):
         return queryset
 
     def perform_destroy(self, instance):
-        # Hanya pemilik ulasan yang boleh menghapus ulasannya sendiri
-        if instance.user != self.request.user:
+        # Admin boleh menghapus review siapa pun (moderasi konten)
+        is_admin = getattr(self.request.user, 'role', None) == 'admin'
+        if not is_admin and instance.user != self.request.user:
             raise PermissionDenied("Anda tidak memiliki izin untuk menghapus ulasan ini.")
         instance.delete()

@@ -7,6 +7,7 @@ class Store(models.Model):
         ACTIVE = 'active', 'Active'
         PENDING_REVIEW = 'pending_review', 'Pending Review'
         REJECTED = 'rejected', 'Rejected'
+        SUSPENDED = 'suspended', 'Suspended'
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='store')

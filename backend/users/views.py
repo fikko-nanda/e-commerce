@@ -7,7 +7,8 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
 
-from .serializers import UserSerializer
+from core.permissions import IsAdminRole
+from .serializers import UserSerializer, AdminUserSerializer
 
 User = get_user_model()
 
@@ -99,6 +100,11 @@ class LoginView(APIView):
         if google_token:
             try:
                 user = verify_google_token_and_get_user(google_token)
+                if not user.is_active:
+                    return Response(
+                        {'error': 'Akun Anda telah ditangguhkan. Silakan hubungi admin.'},
+                        status=status.HTTP_403_FORBIDDEN
+                    )
                 refresh = RefreshToken.for_user(user)
                 return Response({
                     'status': 'success',
@@ -122,6 +128,12 @@ class LoginView(APIView):
         if not user:
             return Response({'error': 'Email atau password salah.'}, status=status.HTTP_401_UNAUTHORIZED)
 
+        if not user.is_active:
+            return Response(
+                {'error': 'Akun Anda telah ditangguhkan. Silakan hubungi admin.'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
         refresh = RefreshToken.for_user(user)
         return Response({
             'user': UserSerializer(user).data,
@@ -142,6 +154,11 @@ class GoogleAuthView(APIView):
 
         try:
             user = verify_google_token_and_get_user(token)
+            if not user.is_active:
+                return Response(
+                    {'error': 'Akun Anda telah ditangguhkan. Silakan hubungi admin.'},
+                    status=status.HTTP_403_FORBIDDEN
+                )
             refresh = RefreshToken.for_user(user)
 
             return Response({
@@ -163,3 +180,67 @@ class UserProfileView(generics.RetrieveUpdateAPIView):
 
     def get_object(self):
         return self.request.user
+
+
+# ============================================================
+# ADMIN: Manajemen User
+# ============================================================
+
+
+class AdminUserListView(APIView):
+    """GET /auth/admin/users/ — daftar seluruh user (hanya admin)."""
+    permission_classes = [IsAdminRole]
+
+    def get(self, request):
+        users = User.objects.all().order_by('-date_joined')
+        role = request.query_params.get('role')
+        if role:
+            users = users.filter(role=role)
+        serializer = AdminUserSerializer(users, many=True)
+        return Response({'data': serializer.data}, status=status.HTTP_200_OK)
+
+
+class AdminUserSuspendView(APIView):
+    """PATCH /auth/admin/users/<id>/suspend/ — toggle status aktif user (hanya admin)."""
+    permission_classes = [IsAdminRole]
+
+    def patch(self, request, pk):
+        try:
+            user = User.objects.get(pk=pk)
+        except User.DoesNotExist:
+            return Response({'error': 'User tidak ditemukan.'}, status=status.HTTP_404_NOT_FOUND)
+
+        if user == request.user:
+            return Response(
+                {'error': 'Admin tidak dapat menangguhkan akun sendiri.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Menerima 'is_active' (bool) atau 'action' ('suspend'/'unsuspend')
+        action = request.data.get('action')
+        is_active = request.data.get('is_active')
+
+        if action:
+            if action == 'suspend':
+                user.is_active = False
+            elif action == 'unsuspend':
+                user.is_active = True
+            else:
+                return Response(
+                    {'error': 'Action harus berupa "suspend" atau "unsuspend".'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+        elif isinstance(is_active, bool):
+            user.is_active = is_active
+        else:
+            return Response(
+                {'error': 'Kirim "action" (suspend/unsuspend) atau "is_active" (boolean).'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        user.save(update_fields=['is_active'])
+        return Response({
+            'status': 'success',
+            'message': f'User {user.email} berhasil {"ditangguhkan" if not user.is_active else "diaktifkan kembali"}.',
+            'user': AdminUserSerializer(user).data
+        }, status=status.HTTP_200_OK)

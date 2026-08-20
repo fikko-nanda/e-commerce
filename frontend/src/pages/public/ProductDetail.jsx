@@ -6,50 +6,6 @@ import { AuthContext } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
 import CheckoutModal from '../../components/CheckoutModal';
 
-// Data dummy cadangan agar sinkron dengan katalog Home
-const DUMMY_PRODUCTS = [
-  {
-    id: 'prod-1',
-    name: 'WARMART Heavyweight Graphic Tee',
-    price: 189000,
-    stock: 45,
-    category: 'tshirt',
-    description: 'Bahan 100% Cotton Combed 24s tebal, potongan oversized brutalist aesthetic dengan sablon plastisol awet.',
-    image: 'https://images.unsplash.com/photo-1521572267360-ee0c2909d518?w=500&auto=format&fit=crop&q=80',
-    store_name: 'WARMART Official',
-  },
-  {
-    id: 'prod-2',
-    name: 'Cyberpunk Black Pullover Hoodie',
-    price: 349000,
-    stock: 12,
-    category: 'hoodie',
-    description: 'Fleece tebal 330gsm dengan sablon grafis cyberpunk. Hangat, nyaman, dan berkarakter.',
-    image: 'https://images.unsplash.com/photo-1556905055-8f358a7a47b2?w=500&auto=format&fit=crop&q=80',
-    store_name: 'WARMART Official',
-  },
-  {
-    id: 'prod-3',
-    name: 'Tactical Cargo Pants Black',
-    price: 279000,
-    stock: 8,
-    category: 'pants',
-    description: 'Celana kargo streetwear banyak saku, jahitan rantai ganda, sangat durable untuk daily wear.',
-    image: 'https://images.unsplash.com/photo-1624378439575-d8705ad7ae80?w=500&auto=format&fit=crop&q=80',
-    store_name: 'WARMART Official',
-  },
-  {
-    id: 'prod-4',
-    name: 'Brutalist Tactical Crossbody Bag',
-    price: 149000,
-    stock: 20,
-    category: 'accessories',
-    description: 'Tas selempang bahan Cordura waterproof, slot serbaguna untuk kebutuhan daily hangout.',
-    image: 'https://images.unsplash.com/photo-1553062407-98eeb64c6a62?w=500&auto=format&fit=crop&q=80',
-    store_name: 'WARMART Official',
-  },
-];
-
 export default function ProductDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -66,46 +22,45 @@ export default function ProductDetail() {
 
   useEffect(() => {
     let cancelled = false;
-    setLoading(true);
-    setError(null);
 
-    // 1. Coba ambil dari backend API
-    productService.getDetail(id)
-      .then((res) => {
+    const fetchData = async () => {
+      try {
+        const res = await productService.getDetail(id);
         if (cancelled) return;
+
         const data = res.data?.data || res.data;
 
         if (data && (data.id || data.name)) {
           setProduct(data);
-          setReviews([]);
-          return reviewService.getByProduct(id);
+
+          // Ambil ulasan produk langsung dari API backend
+          try {
+            const reviewRes = await reviewService.getByProduct(id);
+            if (!cancelled && reviewRes) {
+              const list = Array.isArray(reviewRes.data)
+                ? reviewRes.data
+                : reviewRes.data?.results || reviewRes.data?.data || [];
+              setReviews(list);
+            }
+          } catch {
+            if (!cancelled) setReviews([]);
+          }
         } else {
-          throw new Error('Data API kosong');
+          throw new Error('Data produk tidak valid');
         }
-      })
-      .then((res) => {
-        if (cancelled || !res) return;
-        const list = Array.isArray(res.data) ? res.data : (res.data?.results || res.data?.data || []);
-        setReviews(list);
-      })
-      .catch(() => {
+      } catch (err) {
         if (cancelled) return;
-
-        // 2. Fallback: Jika API gagal / ID tidak ditemukan di DB, cari di DUMMY_PRODUCTS
-        const dummyItem = DUMMY_PRODUCTS.find((p) => String(p.id) === String(id));
-        if (dummyItem) {
-          setProduct(dummyItem);
-          setReviews([]);
-          setError(null);
-        } else {
-          setError('Produk tidak ditemukan.');
-        }
-      })
-      .finally(() => {
+        setError(err.response?.data?.error || 'Produk tidak ditemukan.');
+      } finally {
         if (!cancelled) setLoading(false);
-      });
+      }
+    };
 
-    return () => { cancelled = true; };
+    fetchData();
+
+    return () => {
+      cancelled = true;
+    };
   }, [id]);
 
   if (loading) {
@@ -144,7 +99,6 @@ export default function ProductDetail() {
     setIsCheckoutOpen(true);
   };
 
-  // Handler navigasi ke halaman chat pembeli & penjual dengan proteksi login
   const handleChatSeller = () => {
     if (!user) {
       showToast('Silakan login terlebih dahulu untuk chat dengan penjual!', 'error');
@@ -152,7 +106,7 @@ export default function ProductDetail() {
       return;
     }
 
-    const storeParam = encodeURIComponent(product.store_name || 'WARMART Official');
+    const storeParam = encodeURIComponent(product.store_name || 'Toko');
     const productParam = encodeURIComponent(product.name || '');
     navigate(`/user/chat?store=${storeParam}&productId=${product.id}&productName=${productParam}`);
   };
@@ -184,10 +138,9 @@ export default function ProductDetail() {
 
         <div className="flex flex-col justify-between space-y-6">
           <div>
-            {/* Area Info Toko + Tombol Chat Penjual */}
             <div className="flex items-center gap-2 mb-3">
               <Link
-                to={`/store/${encodeURIComponent(product.store_name || 'WARMART Official')}`}
+                to={`/store/${encodeURIComponent(product.store_name || '')}`}
                 className="bg-black text-white text-[10px] font-black px-2.5 py-1 uppercase tracking-wider inline-block hover:bg-yellow-300 hover:text-black transition border border-black"
               >
                 🏬 {product.store_name || 'Toko'}
