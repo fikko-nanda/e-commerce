@@ -1,12 +1,74 @@
+import os
+from django.contrib.auth import authenticate, get_user_model
+from google.auth.transport import requests
+from google.oauth2 import id_token
 from rest_framework import generics, permissions, status
-from rest_framework.views import APIView
 from rest_framework.response import Response
+from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
-from django.contrib.auth import get_user_model
-from django.contrib.auth import authenticate
+
 from .serializers import UserSerializer
 
 User = get_user_model()
+
+
+def verify_google_token_and_get_user(raw_token):
+    """
+    Helper function untuk memverifikasi Google ID Token secara aman di sisi server
+    dan mengembalikan instance User (membuat baru jika belum ada).
+    """
+    client_id = os.getenv('GOOGLE_CLIENT_ID')
+    if not client_id:
+        raise ValueError('Konfigurasi GOOGLE_CLIENT_ID belum diatur di server.')
+
+    # Verifikasi token dengan Google API Library
+    id_info = id_token.verify_oauth2_token(
+        raw_token,
+        requests.Request(),
+        client_id
+    )
+
+    # Validasi audience & issuer
+    if id_info.get('aud') != client_id:
+        raise ValueError('Token audience tidak cocok dengan Client ID.')
+    
+    if id_info.get('iss') not in ['accounts.google.com', 'https://accounts.google.com']:
+        raise ValueError('Token issuer tidak valid.')
+
+    email = id_info.get('email')
+    if not email:
+        raise ValueError('Token Google tidak mengandung informasi email.')
+
+    google_id = id_info.get('sub')
+
+    # Cari user berdasarkan email
+    user = User.objects.filter(email=email).first()
+
+    if user:
+        # Perbarui google_id jika belum terhubung / berubah
+        if getattr(user, 'google_id', None) != google_id:
+            user.google_id = google_id
+            user.save(update_fields=['google_id'])
+    else:
+        # Buat username unik dari bagian email sebelum @
+        base_username = email.split('@')[0]
+        username = base_username
+        counter = 1
+
+        while User.objects.filter(username=username).exists():
+            username = f"{base_username}{counter}"
+            counter += 1
+
+        default_role = getattr(User.Role, 'BUYER', 'BUYER') if hasattr(User, 'Role') else 'BUYER'
+
+        user = User.objects.create(
+            email=email,
+            username=username,
+            google_id=google_id,
+            role=default_role
+        )
+
+    return user
 
 
 class RegisterView(APIView):
@@ -18,6 +80,7 @@ class RegisterView(APIView):
         serializer.is_valid(raise_exception=True)
         user = serializer.save()
         refresh = RefreshToken.for_user(user)
+
         return Response({
             'user': UserSerializer(user).data,
             'access_token': str(refresh.access_token),
@@ -26,10 +89,29 @@ class RegisterView(APIView):
 
 
 class LoginView(APIView):
-    """Endpoint login manual — mengembalikan user + JWT."""
+    """Endpoint login — mendukung kredensial manual (email/password) maupun Google token."""
     permission_classes = [permissions.AllowAny]
 
     def post(self, request):
+        google_token = request.data.get('google_token') or request.data.get('token')
+
+        # 1. Alur Login via Google Token
+        if google_token:
+            try:
+                user = verify_google_token_and_get_user(google_token)
+                refresh = RefreshToken.for_user(user)
+                return Response({
+                    'status': 'success',
+                    'user': UserSerializer(user).data,
+                    'access_token': str(refresh.access_token),
+                    'refresh_token': str(refresh),
+                }, status=status.HTTP_200_OK)
+            except ValueError as e:
+                return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+            except Exception as e:
+                return Response({'error': f'Terjadi kesalahan server: {str(e)}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        # 2. Alur Login Manual (Email & Password)
         email = request.data.get('email')
         password = request.data.get('password')
 
@@ -48,63 +130,36 @@ class LoginView(APIView):
         }, status=status.HTTP_200_OK)
 
 
+class GoogleAuthView(APIView):
+    """Endpoint terpisah khusus autentikasi via Google ID Token."""
+    permission_classes = [permissions.AllowAny]
+
+    def post(self, request):
+        token = request.data.get('token') or request.data.get('google_token')
+
+        if not token:
+            return Response({'error': 'Google token wajib diisi.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            user = verify_google_token_and_get_user(token)
+            refresh = RefreshToken.for_user(user)
+
+            return Response({
+                'status': 'success',
+                'user': UserSerializer(user).data,
+                'access_token': str(refresh.access_token),
+                'refresh_token': str(refresh),
+            }, status=status.HTTP_200_OK)
+        except ValueError as e:
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
+            return Response({'error': f'Terjadi kesalahan server: {str(e)}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
 class UserProfileView(generics.RetrieveUpdateAPIView):
-    """Endpoint untuk profil user aktif"""
+    """Endpoint untuk mengambil dan memperbarui profil user aktif."""
     serializer_class = UserSerializer
     permission_classes = [permissions.IsAuthenticated]
 
     def get_object(self):
         return self.request.user
-
-
-class GoogleAuthView(APIView):
-    """Endpoint untuk autentikasi via Google Login"""
-    permission_classes = [permissions.AllowAny]
-
-    def post(self, request):
-        email = request.data.get('email')
-        google_id = request.data.get('google_id')
-
-        if not email or not google_id:
-            return Response(
-                {'error': 'Email dan google_id wajib diisi'}, 
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
-        # 1. Cari user berdasarkan email
-        user = User.objects.filter(email=email).first()
-
-        if user:
-            # Jika user sudah ada tetapi belum punya google_id, update google_id-nya
-            if not user.google_id:
-                user.google_id = google_id
-                user.save()
-        else:
-            # Jika user belum ada, buat username unik dari email
-            base_username = email.split('@')[0]
-            username = base_username
-            counter = 1
-            
-            # Mencegah bentrok username jika sudah terpakai
-            while User.objects.filter(username=username).exists():
-                username = f"{base_username}{counter}"
-                counter += 1
-
-            # Tentukan default role (pastikan Enum Role tersedia di User model)
-            default_role = getattr(User.Role, 'BUYER', 'BUYER') if hasattr(User, 'Role') else 'BUYER'
-
-            user = User.objects.create(
-                email=email,
-                username=username,
-                google_id=google_id,
-                role=default_role
-            )
-
-        # 2. Generate Token JWT
-        refresh = RefreshToken.for_user(user)
-        return Response({
-            'status': 'success',
-            'access_token': str(refresh.access_token),
-            'refresh_token': str(refresh),
-            'user': UserSerializer(user).data
-        }, status=status.HTTP_200_OK)

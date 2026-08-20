@@ -1,9 +1,12 @@
-import { createContext, useState, useEffect } from 'react';
+import { createContext, useState, useEffect, useContext } from 'react';
+import { AuthContext } from './AuthContext';
 
 // eslint-disable-next-line react-refresh/only-export-components
 export const CartContext = createContext();
 
 export function CartProvider({ children }) {
+  const { user } = useContext(AuthContext);
+
   const [cart, setCart] = useState(() => {
     const saved = localStorage.getItem('warmart_cart');
     return saved ? JSON.parse(saved) : [];
@@ -14,6 +17,9 @@ export function CartProvider({ children }) {
   }, [cart]);
 
   const addToCart = (product) => {
+    // Proteksi tambahan: Batalkan aksi jika user tidak ada
+    if (!user) return false;
+
     setCart((prevCart) => {
       const existingIndex = prevCart.findIndex((item) => item.id === product.id);
       if (existingIndex > -1) {
@@ -23,7 +29,7 @@ export function CartProvider({ children }) {
       }
       return [...prevCart, { ...product, quantity: 1 }];
     });
-    alert(`${product.name} telah ditambahkan ke keranjang!`);
+    return true;
   };
 
   const removeFromCart = (productId) => {

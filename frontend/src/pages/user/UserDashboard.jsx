@@ -1,8 +1,8 @@
 import { useState, useEffect, useContext } from 'react';
-import { AuthContext } from '../context/AuthContext';
-import { orderService } from '../services';
-import { payWithMidtrans } from '../utils/loadSnap';
-import ReviewModal from '../components/ReviewModal';
+import { AuthContext } from '../../context/AuthContext';
+import { orderService } from '../../services';
+import { payWithMidtrans } from '../../utils/loadSnap';
+import ReviewModal from '../../components/ReviewModal';
 
 export default function UserDashboard() {
   const { user } = useContext(AuthContext);

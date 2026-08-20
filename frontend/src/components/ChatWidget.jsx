@@ -8,10 +8,13 @@ export default function ChatWidget() {
   const [input, setInput] = useState('');
   const socketRef = useRef(null);
 
-  useEffect(() => {
-    if (!user || !isOpen) return;
+  // 🔴 Pengecekan ketat: Pastikan user bukan null/undefined dan memiliki properti id atau email
+  const isLoggedIn = Boolean(user && (user.id || user.email || Object.keys(user).length > 0));
 
-    const wsUrl = `${import.meta.env.VITE_WS_BASE_URL || 'ws://localhost:8000/ws'}/chat/room_${user.id}/`;
+  useEffect(() => {
+    if (!isLoggedIn || !isOpen) return;
+
+    const wsUrl = `${import.meta.env.VITE_WS_BASE_URL || 'ws://localhost:8000/ws'}/chat/room_${user?.id || 'guest'}/`;
     socketRef.current = new WebSocket(wsUrl);
 
     socketRef.current.onmessage = (event) => {
@@ -26,9 +29,10 @@ export default function ChatWidget() {
     return () => {
       if (socketRef.current) socketRef.current.close();
     };
-  }, [user, isOpen]);
+  }, [isLoggedIn, user, isOpen]);
 
-  if (!user) return null;
+  // 🔴 Jika belum/tidak login, jangan tampilkan widget sama sekali
+  if (!isLoggedIn) return null;
 
   const handleSend = (e) => {
     e.preventDefault();
@@ -36,7 +40,7 @@ export default function ChatWidget() {
 
     const messageData = {
       message: input,
-      sender: user.email,
+      sender: user?.email || 'User',
     };
 
     socketRef.current.send(JSON.stringify(messageData));
@@ -67,7 +71,7 @@ export default function ChatWidget() {
                 <div 
                   key={index} 
                   className={`max-w-[80%] p-2.5 text-xs font-bold border-2 border-black ${
-                    msg.sender === user.email 
+                    msg.sender === user?.email 
                       ? 'bg-black text-white ml-auto' 
                       : 'bg-white text-black mr-auto'
                   }`}

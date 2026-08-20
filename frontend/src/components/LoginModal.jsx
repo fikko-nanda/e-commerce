@@ -1,4 +1,5 @@
-import { useState, useContext } from 'react';
+import { useState, useContext, useEffect, useCallback } from 'react';
+import { jwtDecode } from 'jwt-decode';
 import { AuthContext } from '../context/AuthContext';
 import { authService } from '../services';
 
@@ -11,15 +12,147 @@ export default function LoginModal({ isOpen, onClose }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
+  // 1. Reset Form & State saat modal ditutup
+  const resetForm = () => {
+    setEmail('');
+    setUsername('');
+    setPassword('');
+    setError('');
+    setMode('login');
+  };
+
+  const handleClose = useCallback(() => {
+    resetForm();
+    onClose();
+  }, [onClose]);
+
+  const handleModeChange = (newMode) => {
+    setMode(newMode);
+    setError('');
+  };
+
+  // 2. Callback Asli Google One Tap / GIS SDK
+  const handleGoogleSignIn = useCallback(
+  async (credentialResponse) => {
+    setError('');
+    setLoading(true);
+
+    try {
+      const token = credentialResponse.credential;
+
+      if (!token) {
+        throw new Error('Google token tidak ditemukan.');
+      }
+
+      const res = await authService.googleLogin(token);
+
+      login(
+        res.data.access_token,
+        res.data.refresh_token,
+        res.data.user
+      );
+
+      alert('Berhasil masuk dengan Google!');
+      handleClose();
+    } catch (err) {
+      setError(
+        err.response?.data?.error ||
+        err.response?.data?.detail ||
+        err.message ||
+        'Gagal login Google.'
+      );
+    } finally {
+      setLoading(false);
+    }
+  },
+  [login, handleClose]
+);
+
+  // 3. Inisialisasi Google GIS SDK
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
+
+    const initGoogle = () => {
+      if (window.google?.accounts?.id && clientId) {
+        window.google.accounts.id.initialize({
+          client_id: clientId,
+          callback: handleGoogleSignIn,
+        });
+      }
+    };
+
+    if (window.google?.accounts?.id) {
+      initGoogle();
+    } else {
+      const interval = setInterval(() => {
+        if (window.google?.accounts?.id) {
+          initGoogle();
+          clearInterval(interval);
+        }
+      }, 300);
+      return () => clearInterval(interval);
+    }
+  }, [isOpen, handleGoogleSignIn]);
+
+  // 4. Keyboard Shortcut (ESC Key) untuk Menutup Modal
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape' && isOpen) {
+        handleClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, handleClose]);
+
   if (!isOpen) return null;
 
+  // 5. Trigger Popup Prompt Google
+const triggerGooglePrompt = () => {
+  const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
+
+  if (!clientId) {
+    setError('VITE_GOOGLE_CLIENT_ID belum diatur di file .env');
+    return;
+  }
+
+  if (window.google?.accounts?.id) {
+    window.google.accounts.id.prompt((notification) => {
+      if (
+        notification.isNotDisplayed() ||
+        notification.isSkippedMoment()
+      ) {
+        console.log(
+          'One Tap tidak ditampilkan, alasan:',
+          notification.getNotDisplayedReason()
+        );
+      }
+    });
+  } else {
+    setError(
+      'Script Google sedang dimuat, silakan klik tombol sekali lagi.'
+    );
+  }
+};
+
+  // 6. Submit Form Manual (Login, Register, Forgot)
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
 
+    const cleanEmail = email.trim();
+    const cleanUsername = username.trim();
+
     if (mode === 'forgot') {
-      alert(`Link instruksi reset password telah dikirim ke ${email}`);
+      if (!cleanEmail) {
+        setError('Masukkan email Anda terlebih dahulu.');
+        return;
+      }
+      alert(`Link instruksi reset password telah dikirim ke ${cleanEmail}`);
       setMode('login');
+      setError('');
       return;
     }
 
@@ -27,70 +160,69 @@ export default function LoginModal({ isOpen, onClose }) {
     try {
       if (mode === 'register') {
         const res = await authService.register({
-          email, username, password,
+          email: cleanEmail,
+          username: cleanUsername,
+          password,
         });
         login(res.data.access_token, res.data.refresh_token, res.data.user);
         alert('Registrasi berhasil! Selamat datang.');
-        onClose();
+        handleClose();
       } else {
-        const res = await authService.login({ email, password });
+        const res = await authService.login({ email: cleanEmail, password });
         login(res.data.access_token, res.data.refresh_token, res.data.user);
         alert('Berhasil masuk!');
-        onClose();
+        handleClose();
       }
     } catch (err) {
-      setError(err.response?.data?.error || err.response?.data?.detail || 'Terjadi kesalahan.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleGoogleLogin = async () => {
-    setError('');
-    setLoading(true);
-    try {
-      // Simulasi Google Login — kirim email dummy ke backend
-      const res = await authService.googleLogin({
-        email: 'google_user@gmail.com',
-        google_id: 'simulated-google-id-' + Date.now(),
-      });
-      login(res.data.access_token, res.data.refresh_token, res.data.user);
-      alert('Berhasil masuk dengan Google!');
-      onClose();
-    } catch (err) {
-      setError(err.response?.data?.error || 'Gagal login Google.');
+      setError(
+        err.response?.data?.error ||
+          err.response?.data?.detail ||
+          err.response?.data?.message ||
+          'Terjadi kesalahan. Silakan coba lagi.'
+      );
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
-      <div className="bg-white border-4 border-black p-8 max-w-md w-full relative shadow-brutal-lg">
+    <div
+      className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4"
+      onClick={handleClose}
+    >
+      <div
+        className="bg-white border-4 border-black p-8 max-w-md w-full relative shadow-brutal-lg"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Button Close */}
         <button
-          onClick={onClose}
+          type="button"
+          onClick={handleClose}
           className="absolute top-4 right-4 text-xl font-black bg-red-500 text-white px-2.5 py-0.5 border-2 border-black hover:bg-black transition"
         >
           ✕
         </button>
 
+        {/* Header Modal */}
         <h3 className="text-2xl font-black uppercase tracking-tighter mb-6 border-b-4 border-black pb-2">
           {mode === 'login' && 'Masuk Akun'}
           {mode === 'register' && 'Daftar Akun'}
           {mode === 'forgot' && 'Lupa Password'}
         </h3>
 
+        {/* Alert Error */}
         {error && (
           <div className="bg-red-100 border-2 border-red-500 text-red-700 px-3 py-2 text-xs font-bold mb-4">
             {error}
           </div>
         )}
 
+        {/* Google Login Button */}
         {mode !== 'forgot' && (
           <>
             <button
               type="button"
-              onClick={handleGoogleLogin}
+              onClick={triggerGooglePrompt}
               disabled={loading}
               className="w-full bg-white text-black font-black py-3 px-4 uppercase text-xs tracking-wider border-2 border-black shadow-brutal hover:bg-yellow-300 flex items-center justify-center gap-3 transition mb-4 active:translate-x-0.5 active:translate-y-0.5 disabled:opacity-50"
             >
@@ -113,13 +245,17 @@ export default function LoginModal({ isOpen, onClose }) {
           </>
         )}
 
+        {/* Form Input Manual */}
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="block text-xs font-black uppercase mb-1">Email</label>
             <input
               type="email"
               value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              onChange={(e) => {
+                setEmail(e.target.value);
+                setError('');
+              }}
               placeholder="user@example.com"
               className="w-full bg-gray-50 border-2 border-black p-2.5 font-bold text-xs focus:outline-none"
               required
@@ -132,7 +268,10 @@ export default function LoginModal({ isOpen, onClose }) {
               <input
                 type="text"
                 value={username}
-                onChange={(e) => setUsername(e.target.value)}
+                onChange={(e) => {
+                  setUsername(e.target.value);
+                  setError('');
+                }}
                 placeholder="username123"
                 className="w-full bg-gray-50 border-2 border-black p-2.5 font-bold text-xs focus:outline-none"
                 required
@@ -147,7 +286,7 @@ export default function LoginModal({ isOpen, onClose }) {
                 {mode === 'login' && (
                   <button
                     type="button"
-                    onClick={() => setMode('forgot')}
+                    onClick={() => handleModeChange('forgot')}
                     className="text-[10px] font-black uppercase text-red-600 hover:underline"
                   >
                     Lupa Password?
@@ -157,7 +296,10 @@ export default function LoginModal({ isOpen, onClose }) {
               <input
                 type="password"
                 value={password}
-                onChange={(e) => setPassword(e.target.value)}
+                onChange={(e) => {
+                  setPassword(e.target.value);
+                  setError('');
+                }}
                 placeholder="••••••••"
                 className="w-full bg-gray-50 border-2 border-black p-2.5 font-bold text-xs focus:outline-none"
                 required
@@ -170,14 +312,22 @@ export default function LoginModal({ isOpen, onClose }) {
             disabled={loading}
             className="w-full bg-black text-white font-black py-3 uppercase tracking-wider text-xs border-2 border-black shadow-brutal hover:bg-yellow-300 hover:text-black transition active:translate-x-0.5 active:translate-y-0.5 disabled:opacity-50"
           >
-            {loading ? 'Memproses...' : mode === 'login' ? 'Masuk Sekarang' : mode === 'register' ? 'Buat Akun Sekarang' : 'Kirim Link Reset'}
+            {loading
+              ? 'Memproses...'
+              : mode === 'login'
+              ? 'Masuk Sekarang'
+              : mode === 'register'
+              ? 'Buat Akun Sekarang'
+              : 'Kirim Link Reset'}
           </button>
         </form>
 
+        {/* Footer Toggle Mode */}
         <div className="mt-6 border-t-2 border-black pt-4 text-center">
           {mode === 'forgot' ? (
             <button
-              onClick={() => setMode('login')}
+              type="button"
+              onClick={() => handleModeChange('login')}
               className="text-xs font-black uppercase underline hover:text-red-600"
             >
               ← Kembali ke Halaman Masuk
@@ -186,7 +336,8 @@ export default function LoginModal({ isOpen, onClose }) {
             <p className="text-xs font-bold">
               {mode === 'register' ? 'Sudah punya akun?' : 'Belum punya akun?'}{' '}
               <button
-                onClick={() => setMode(mode === 'register' ? 'login' : 'register')}
+                type="button"
+                onClick={() => handleModeChange(mode === 'register' ? 'login' : 'register')}
                 className="font-black underline uppercase text-red-600 hover:text-black"
               >
                 {mode === 'register' ? 'Masuk di sini' : 'Daftar di sini'}
