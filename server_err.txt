@@ -1,1 +1,0 @@
-HTTP GET /api/v1/products/ 200 [0.11, 127.0.0.1:56570]

@@ -1,13 +1,29 @@
 import { useContext } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { CartContext } from '../context/CartContext';
+import { AuthContext } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 
 export default function ProductCard({ product }) {
+  const navigate = useNavigate();
+  const { user } = useContext(AuthContext);
   const { addToCart } = useContext(CartContext);
   const { showToast } = useToast();
 
   const imageUrl = product.image || product.image_url;
+
+  const handleAddToCart = () => {
+    // 1. Cek apakah user sudah login
+    if (!user) {
+      showToast('Silakan login terlebih dahulu untuk menambah ke keranjang!', 'error');
+      navigate('/login', { state: { from: '/' } });
+      return;
+    }
+
+    // 2. Jika sudah login, tambahkan ke keranjang
+    addToCart(product);
+    showToast(`${product.name} masuk keranjang!`, 'success');
+  };
 
   return (
     <div className="bg-white border-4 border-black p-4 shadow-brutal flex flex-col justify-between hover:-translate-y-1 transition duration-200">
@@ -50,10 +66,8 @@ export default function ProductCard({ product }) {
             Detail
           </Link>
           <button
-            onClick={() => {
-              addToCart(product);
-              showToast(`${product.name} masuk keranjang!`, 'success');
-            }}
+            type="button"
+            onClick={handleAddToCart}
             className="flex-1 bg-yellow-300 font-black text-[11px] uppercase py-2 border-2 border-black shadow-brutal hover:bg-green-400 transition"
           >
             + Keranjang

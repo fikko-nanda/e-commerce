@@ -1,6 +1,6 @@
 import { useState, useContext } from 'react';
-import { AuthContext } from '../context/AuthContext';
-import { authService } from '../services';
+import { AuthContext } from '../../context/AuthContext';
+import { authService } from '../../services';
 
 export default function UserProfile() {
   const { user, setUser } = useContext(AuthContext);
@@ -22,10 +22,10 @@ export default function UserProfile() {
       });
       setUser(res.data);
       alert('Profil berhasil diperbarui!');
-      setLoading(false);
     } catch (err) {
       console.error('Gagal update profil:', err);
       alert('Gagal mengedit profil.');
+    } finally {
       setLoading(false);
     }
   };
@@ -36,7 +36,7 @@ export default function UserProfile() {
         Pengaturan Profil
       </h2>
 
-      <form onSubmit={handleSave} className="bg-white border-4 border-black p-8 space-y-6 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]">
+      <form onSubmit={handleSave} className="bg-white border-4 border-black p-8 space-y-6 shadow-brutal">
         <div>
           <label className="block text-xs font-bold uppercase mb-1">Email (Tidak dapat diubah)</label>
           <input 
@@ -53,7 +53,7 @@ export default function UserProfile() {
             type="text" 
             value={name} 
             onChange={(e) => setName(e.target.value)} 
-            className="w-full bg-gray-50 border-2 border-black p-2.5 font-bold text-sm" 
+            className="w-full bg-gray-50 border-2 border-black p-2.5 font-bold text-sm focus:outline-none focus:bg-yellow-100" 
           />
         </div>
 
@@ -63,7 +63,7 @@ export default function UserProfile() {
             type="text" 
             value={phone} 
             onChange={(e) => setPhone(e.target.value)} 
-            className="w-full bg-gray-50 border-2 border-black p-2.5 font-bold text-sm" 
+            className="w-full bg-gray-50 border-2 border-black p-2.5 font-bold text-sm focus:outline-none focus:bg-yellow-100" 
           />
         </div>
 
@@ -73,16 +73,16 @@ export default function UserProfile() {
             rows={3} 
             value={address} 
             onChange={(e) => setAddress(e.target.value)} 
-            className="w-full bg-gray-50 border-2 border-black p-2.5 font-bold text-sm" 
+            className="w-full bg-gray-50 border-2 border-black p-2.5 font-bold text-sm focus:outline-none focus:bg-yellow-100" 
           />
         </div>
 
         <button 
           type="submit" 
           disabled={loading} 
-          className="w-full bg-black text-white font-black py-4 uppercase tracking-wider hover:bg-gray-800 transition"
+          className="w-full bg-black text-white font-black py-4 uppercase tracking-wider hover:bg-yellow-300 hover:text-black border-2 border-black transition disabled:opacity-50"
         >
-          {loading ? 'Simpan...' : 'Simpan Perubahan'}
+          {loading ? 'Menyimpan...' : 'Simpan Perubahan'}
         </button>
       </form>
     </div>
