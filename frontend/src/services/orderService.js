@@ -18,6 +18,9 @@ const orderService = {
 
   /** POST /orders/<id>/pay/ — regenerate snap token Midtrans untuk order pending */
   pay: (id) => API.post(`/orders/${id}/pay/`),
+
+  /** POST /orders/<id>/success/ — ubah status order ke PAID setelah bayar di Snap */
+  markSuccess: (id) => API.post(`/orders/${id}/success/`),
 };
 
 export default orderService;

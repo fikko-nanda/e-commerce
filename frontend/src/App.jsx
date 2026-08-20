@@ -8,6 +8,7 @@ import { ChatProvider } from './context/ChatContext';
 import Navbar from './components/Navbar';
 import ChatDrawer from './components/ChatDrawer';
 import Footer from './components/Footer';
+import ProtectedRoute from './components/ProtectedRoute';
 
 import Home from './pages/public/Home';
 import ProductDetail from './pages/public/ProductDetail';
@@ -16,6 +17,7 @@ import StoreProfile from './pages/public/StoreProfile';
 
 import SellerDashboard from './pages/seller/SellerDashboard';
 import UserDashboard from './pages/user/UserDashboard';
+import AdminDashboard from './pages/admin/AdminDashboard';
 
 function AppContent() {
   const { user } = useContext(AuthContext);
@@ -31,8 +33,13 @@ function AppContent() {
             <Route path="/product/:id" element={<ProductDetail />} />
             <Route path="/seller" element={<SellerDashboard />} />
             <Route path="/user/dashboard" element={<UserDashboard />} />
-            <Route path="*" element={<NotFound />} />
             <Route path="/store/:storeName" element={<StoreProfile />} />
+            <Route path="/admin" element={
+              <ProtectedRoute requiredRole="admin">
+                <AdminDashboard />
+              </ProtectedRoute>
+            } />
+            <Route path="*" element={<NotFound />} />
           </Routes>
         </main>
         <Footer />

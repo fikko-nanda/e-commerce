@@ -13,7 +13,7 @@ export default function UserDashboard() {
   const fetchOrders = async () => {
     try {
       const res = await orderService.getMyOrders();
-      setOrders(res.data.data || []);
+      setOrders(res.data?.data || res.data || []);
     } catch (err) {
       console.error('Gagal memuat orders:', err);
     } finally {
@@ -21,32 +21,75 @@ export default function UserDashboard() {
     }
   };
 
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
+ useEffect(() => {
+    let active = true;
+
+    const loadOrders = async () => {
       try {
         const res = await orderService.getMyOrders();
-        if (!cancelled) setOrders(res.data.data || []);
-      } catch {
-        if (!cancelled) console.error('Gagal memuat orders');
+        if (active) {
+          setOrders(res.data?.data || res.data || []);
+        }
+      } catch (err) {
+        console.error('Gagal memuat orders:', err);
       } finally {
-        if (!cancelled) setLoading(false);
+        if (active) setLoading(false);
       }
-    })();
-    return () => { cancelled = true; };
+    };
+
+    loadOrders();
+
+    return () => {
+      active = false;
+    };
   }, []);
+
+  // 2. Polling Otomatis: Cek ke backend setiap 3 detik JIKA ada pesanan pending
+  useEffect(() => {
+    const hasPendingOrder = orders.some(
+      (ord) => ord.payment_status === 'pending' && ord.payment_method === 'midtrans'
+    );
+
+    if (!hasPendingOrder) return;
+
+    const interval = setInterval(() => {
+      orderService.getMyOrders()
+        .then((res) => {
+          setOrders(res.data?.data || res.data || []);
+        })
+        .catch((err) => console.error('Error polling orders:', err));
+    }, 3000);
+
+    return () => clearInterval(interval);
+  }, [orders]);
 
   const handlePay = async (order) => {
     try {
       const res = await orderService.pay(order.id);
       const snapToken = res.data.snap_token;
+
       payWithMidtrans(
         snapToken,
-        () => {
-          alert('Pembayaran Berhasil!');
-          fetchOrders();
+        async () => {
+          // Trigger jika sukses
+          try {
+            await orderService.markSuccess(order.id);
+          } catch (e) {
+            console.error('Mark success error:', e);
+          } finally {
+            fetchOrders();
+          }
         },
-        () => alert('Pembayaran Gagal. Silakan coba lagi.')
+        async () => {
+          // Trigger jika pending / popup ditutup setelah bayar
+          try {
+            await orderService.markSuccess(order.id);
+          } catch (e) {
+            console.error('Mark success error:', e);
+          } finally {
+            fetchOrders();
+          }
+        }
       );
     } catch (err) {
       alert(err.response?.data?.error || 'Gagal memproses pembayaran.');
@@ -55,8 +98,14 @@ export default function UserDashboard() {
 
   const formatDate = (isoStr) => {
     try {
-      return new Date(isoStr).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' });
-    } catch { return isoStr; }
+      return new Date(isoStr).toLocaleDateString('id-ID', {
+        day: 'numeric',
+        month: 'short',
+        year: 'numeric',
+      });
+    } catch {
+      return isoStr;
+    }
   };
 
   const statusBadge = (text, color) => (
@@ -66,7 +115,11 @@ export default function UserDashboard() {
   );
 
   if (loading) {
-    return <div className="text-center py-20 font-black uppercase text-gray-400">Memuat Riwayat Transaksi...</div>;
+    return (
+      <div className="text-center py-20 font-black uppercase text-gray-400">
+        Memuat Riwayat Transaksi...
+      </div>
+    );
   }
 
   return (
@@ -94,67 +147,102 @@ export default function UserDashboard() {
           <div className="bg-gray-50 border-4 border-black p-12 text-center font-black text-gray-400 uppercase">
             Belum ada transaksi. Yuk mulai belanja!
           </div>
-        ) : orders.map((ord) => (
-          <div key={ord.id} className="bg-white border-4 border-black p-6 shadow-brutal space-y-4">
-            <div className="flex justify-between items-center border-b-2 border-black pb-3 flex-wrap gap-2">
-              <div>
-                <span className="font-black text-xs uppercase mr-3">#{ord.id.slice(0, 8)}</span>
-                <span className="text-xs font-bold text-gray-500">{formatDate(ord.created_at)}</span>
-              </div>
-              <div className="flex gap-2 flex-wrap">
-                {statusBadge(`BAYAR: ${ord.payment_status?.toUpperCase()}`,
-                  ord.payment_status === 'paid' ? 'bg-green-400 text-black' :
-                  ord.payment_status === 'failed' ? 'bg-red-400 text-white' : 'bg-yellow-300 text-black'
-                )}
-                {statusBadge(`KIRIM: ${ord.shipping_status?.toUpperCase()}`,
-                  ord.shipping_status === 'delivered' ? 'bg-green-400 text-black' :
-                  ord.shipping_status === 'shipped' ? 'bg-blue-400 text-white' : 'bg-gray-200'
-                )}
-              </div>
-            </div>
-
-            <div className="flex justify-between text-xs font-bold items-center">
-              <div className="flex items-center gap-3">
-                {ord.product_image && <img src={ord.product_image} alt={ord.product_name} className="w-12 h-12 object-cover border-2 border-black" />}
+        ) : (
+          orders.map((ord) => (
+            <div key={ord.id} className="bg-white border-4 border-black p-6 shadow-brutal space-y-4">
+              <div className="flex justify-between items-center border-b-2 border-black pb-3 flex-wrap gap-2">
                 <div>
-                  <span>{ord.product_name} (x{ord.quantity})</span>
-                  <span className="block text-[10px] text-gray-500 mt-1">{ord.store_name}</span>
+                  <span className="font-black text-xs uppercase mr-3">
+                    #{ord.id.slice(0, 8)}
+                  </span>
+                  <span className="text-xs font-bold text-gray-500">
+                    {formatDate(ord.created_at)}
+                  </span>
+                </div>
+                <div className="flex gap-2 flex-wrap">
+                  {statusBadge(
+                    `BAYAR: ${ord.payment_status?.toUpperCase()}`,
+                    ord.payment_status === 'paid'
+                      ? 'bg-green-400 text-black'
+                      : ord.payment_status === 'failed'
+                      ? 'bg-red-400 text-white'
+                      : 'bg-yellow-300 text-black'
+                  )}
+                  {statusBadge(
+                    `KIRIM: ${ord.shipping_status?.toUpperCase()}`,
+                    ord.shipping_status === 'delivered'
+                      ? 'bg-green-400 text-black'
+                      : ord.shipping_status === 'shipped'
+                      ? 'bg-blue-400 text-white'
+                      : 'bg-gray-200'
+                  )}
                 </div>
               </div>
-              <span>Rp {Number(ord.total_price).toLocaleString('id-ID')}</span>
-            </div>
 
-            {ord.courier_name && (
-              <div className="text-xs font-bold text-gray-600 border-t-2 border-black pt-2">
-                📦 Kurir: {ord.courier_name} {ord.tracking_number && `| No. Resi: ${ord.tracking_number}`}
+              <div className="flex justify-between text-xs font-bold items-center">
+                <div className="flex items-center gap-3">
+                  {ord.product_image && (
+                    <img
+                      src={ord.product_image}
+                      alt={ord.product_name}
+                      className="w-12 h-12 object-cover border-2 border-black"
+                    />
+                  )}
+                  <div>
+                    <span>
+                      {ord.product_name} (x{ord.quantity})
+                    </span>
+                    <span className="block text-[10px] text-gray-500 mt-1">
+                      {ord.store_name}
+                    </span>
+                  </div>
+                </div>
+                <span>Rp {Number(ord.total_price).toLocaleString('id-ID')}</span>
               </div>
-            )}
 
-            <div className="flex justify-between items-center border-t-2 border-black pt-3 flex-wrap gap-3">
-              <div>
-                <span className="text-[10px] font-black uppercase text-gray-500 block">Total Pembayaran</span>
-                <span className="text-lg font-black">Rp {Number(ord.total_price).toLocaleString('id-ID')}</span>
-              </div>
-              <div className="flex gap-2">
-                {ord.payment_status === 'pending' && ord.payment_method === 'midtrans' && (
-                  <button onClick={() => handlePay(ord)}
-                    className="bg-black text-white font-black text-xs uppercase px-5 py-2.5 border-2 border-black shadow-brutal hover:bg-green-400 hover:text-black transition">
-                    Bayar Sekarang 💳
-                  </button>
-                )}
-                {ord.payment_status === 'pending' && ord.payment_method === 'cod' && (
-                  <span className="text-xs font-black uppercase text-gray-500 px-3 py-2.5">Bayar di Tempat</span>
-                )}
-                {ord.payment_status === 'paid' && ord.shipping_status !== 'delivered' && (
-                  <button onClick={() => setReviewOrder(ord)}
-                    className="bg-yellow-300 font-black text-xs uppercase px-5 py-2.5 border-2 border-black shadow-brutal hover:bg-black hover:text-white transition">
-                    ⭐ Beri Ulasan
-                  </button>
-                )}
+              {ord.courier_name && (
+                <div className="text-xs font-bold text-gray-600 border-t-2 border-black pt-2">
+                  📦 Kurir: {ord.courier_name}{' '}
+                  {ord.tracking_number && `| No. Resi: ${ord.tracking_number}`}
+                </div>
+              )}
+
+              <div className="flex justify-between items-center border-t-2 border-black pt-3 flex-wrap gap-3">
+                <div>
+                  <span className="text-[10px] font-black uppercase text-gray-500 block">
+                    Total Pembayaran
+                  </span>
+                  <span className="text-lg font-black">
+                    Rp {Number(ord.total_price).toLocaleString('id-ID')}
+                  </span>
+                </div>
+                <div className="flex gap-2">
+                  {ord.payment_status === 'pending' && ord.payment_method === 'midtrans' && (
+                    <button
+                      onClick={() => handlePay(ord)}
+                      className="bg-black text-white font-black text-xs uppercase px-5 py-2.5 border-2 border-black shadow-brutal hover:bg-green-400 hover:text-black transition"
+                    >
+                      Bayar Sekarang 💳
+                    </button>
+                  )}
+                  {ord.payment_status === 'pending' && ord.payment_method === 'cod' && (
+                    <span className="text-xs font-black uppercase text-gray-500 px-3 py-2.5">
+                      Bayar di Tempat
+                    </span>
+                  )}
+                  {ord.payment_status === 'paid' && ord.shipping_status !== 'delivered' && (
+                    <button
+                      onClick={() => setReviewOrder(ord)}
+                      className="bg-yellow-300 font-black text-xs uppercase px-5 py-2.5 border-2 border-black shadow-brutal hover:bg-black hover:text-white transition"
+                    >
+                      ⭐ Beri Ulasan
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
-          </div>
-        ))}
+          ))
+        )}
       </div>
 
       <ReviewModal

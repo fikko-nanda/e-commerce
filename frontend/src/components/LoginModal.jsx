@@ -1,5 +1,5 @@
 import { useState, useContext, useEffect, useCallback } from 'react';
-import { jwtDecode } from 'jwt-decode';
+
 import { AuthContext } from '../context/AuthContext';
 import { authService } from '../services';
 

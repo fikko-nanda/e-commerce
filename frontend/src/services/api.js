@@ -10,7 +10,19 @@ const API = axios.create({
 // Interceptor: sisipkan access token ke setiap request
 API.interceptors.request.use(
   (config) => {
-    const token = localStorage.getItem('access_token');
+    // Cari token dari 'access_token' atau 'token'
+    let token = localStorage.getItem('access_token') || localStorage.getItem('token');
+    
+    // Jika masih kosong, coba ambil dari objek user jika ada
+    if (!token) {
+      try {
+        const warmartUser = JSON.parse(localStorage.getItem('warmart_user') || '{}');
+        token = warmartUser.token || warmartUser.access_token || warmartUser.access;
+      } catch {
+        token = null;
+      }
+    }
+
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
@@ -38,8 +50,12 @@ API.interceptors.response.use(
       return Promise.reject(error);
     }
 
-    // Jangan refresh untuk endpoint login/register/refresh itu sendiri
-    if (originalRequest.url?.includes('/auth/login') || originalRequest.url?.includes('/auth/register') || originalRequest.url?.includes('/auth/refresh')) {
+    // Jangan refresh untuk endpoint auth/login/register/refresh
+    if (
+      originalRequest.url?.includes('/auth/login') ||
+      originalRequest.url?.includes('/auth/register') ||
+      originalRequest.url?.includes('/auth/refresh')
+    ) {
       return Promise.reject(error);
     }
 
@@ -73,8 +89,9 @@ API.interceptors.response.use(
       return API(originalRequest);
     } catch (err) {
       processQueue(err, null);
-      // Refresh gagal — logout
+      // Refresh gagal — hapus storage & logout
       localStorage.removeItem('access_token');
+      localStorage.removeItem('token');
       localStorage.removeItem('refresh_token');
       localStorage.removeItem('warmart_user');
       window.location.href = '/';

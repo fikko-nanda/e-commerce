@@ -73,47 +73,31 @@ export default function Home() {
     return () => clearTimeout(timer);
   }, [searchQuery]);
 
-  // Fetch API + Fallback ke Data Dummy
+ // Fetch API + Fallback ke Data Dummy
   useEffect(() => {
     let cancelled = false;
-    setLoading(true);
 
-    productService
-      .getAll(selectedCategory)
-      .then((res) => {
+    const fetchProducts = async () => {
+      try {
+        const res = await productService.getAll(selectedCategory);
         if (cancelled) return;
 
         const dataList = Array.isArray(res.data)
           ? res.data
-          : Array.isArray(res.data?.data)
-          ? res.data.data
-          : Array.isArray(res.data?.results)
-          ? res.data.results
-          : [];
+          : res.data?.results || res.data?.data || [];
 
-        // Jika API mengembalikan array yang tidak kosong, pakai data API
-        if (dataList && dataList.length > 0) {
-          setProducts(dataList);
-        } else {
-          // Fallback ke data dummy jika backend kosong
-          const filteredDummy =
-            selectedCategory === 'all'
-              ? DUMMY_PRODUCTS
-              : DUMMY_PRODUCTS.filter((p) => p.category === selectedCategory);
-          setProducts(filteredDummy);
-        }
-        setLoading(false);
-      })
-      .catch(() => {
+        setProducts(dataList);
+      } catch (err) {
         if (cancelled) return;
-        // Fallback ke data dummy jika API gagal / offline
-        const filteredDummy =
-          selectedCategory === 'all'
-            ? DUMMY_PRODUCTS
-            : DUMMY_PRODUCTS.filter((p) => p.category === selectedCategory);
-        setProducts(filteredDummy);
-        setLoading(false);
-      });
+        console.error('Gagal mengambil daftar produk:', err);
+        // Fallback ke data dummy jika API error
+        setProducts(DUMMY_PRODUCTS || []);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+
+    fetchProducts();
 
     return () => {
       cancelled = true;
