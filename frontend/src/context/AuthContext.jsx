@@ -1,63 +1,65 @@
-import { createContext, useState, useEffect, useCallback } from 'react';
-import API from '../services/api';
+import { createContext, useState, useEffect } from 'react';
+import { authService } from '../services';
 
+// eslint-disable-next-line react-refresh/only-export-components
 export const AuthContext = createContext();
 
-export const AuthProvider = ({ children }) => {
-  const [user, setUser] = useState(null);
-  const [token, setToken] = useState(localStorage.getItem('access_token') || null);
-  const [loading, setLoading] = useState(true);
-  const [initiated, setInitiated] = useState(false); // Track if validation has run
+export function AuthProvider({ children }) {
+  const [user, setUser] = useState(() => {
+    const savedUser = localStorage.getItem('warmart_user');
+    return savedUser ? JSON.parse(savedUser) : null;
+  });
+  const [loading, setLoading] = useState(() => !!localStorage.getItem('access_token'));
 
-  // Validate token on mount (hanya sekali saat aplikasi load)
+  // Validasi token saat pertama kali load
   useEffect(() => {
-    if (initiated) return; // Skip jika sudah dijalankan
-    setInitiated(true);
+    const token = localStorage.getItem('access_token');
+    if (!token) return;
 
-    const savedToken = localStorage.getItem('access_token');
-    if (!savedToken) {
-      setLoading(false);
-      return;
-    }
-    
-    API.get('/auth/me/')
+    let cancelled = false;
+    authService.getMe()
       .then((res) => {
-        setUser(res.data);
-        setToken(savedToken);
+        if (!cancelled) setUser(res.data);
       })
-      .catch((err) => {
-        // Ignore 401 errors during init - user may not be logged in yet
-        if (err.response?.status !== 401) {
-          console.error('Auth context fetch failed:', err);
+      .catch(() => {
+        if (!cancelled) {
+          localStorage.removeItem('access_token');
+          localStorage.removeItem('refresh_token');
+          localStorage.removeItem('warmart_user');
+          setUser(null);
         }
-        localStorage.removeItem('access_token');
-        localStorage.removeItem('refresh_token');
-        localStorage.removeItem('user');
-        setToken(null);
-        setUser(null);
       })
-      .finally(() => setLoading(false));
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    return () => { cancelled = true; };
   }, []);
 
-  const login = useCallback((accessToken, refreshToken, userData) => {
+  useEffect(() => {
+    if (user) {
+      localStorage.setItem('warmart_user', JSON.stringify(user));
+    } else {
+      localStorage.removeItem('warmart_user');
+    }
+  }, [user]);
+
+  const login = (accessToken, refreshToken, userData) => {
     localStorage.setItem('access_token', accessToken);
     localStorage.setItem('refresh_token', refreshToken);
-    localStorage.setItem('user', JSON.stringify(userData));
-    setToken(accessToken);
     setUser(userData);
-  }, []);
+  };
 
-  const logout = useCallback(() => {
+  const logout = () => {
     localStorage.removeItem('access_token');
     localStorage.removeItem('refresh_token');
-    localStorage.removeItem('user');
-    setToken(null);
+    localStorage.removeItem('warmart_user');
     setUser(null);
-  }, []);
+  };
 
   return (
-    <AuthContext.Provider value={{ user, token, loading, login, logout }}>
+    <AuthContext.Provider value={{ user, login, logout, loading, setUser }}>
       {children}
     </AuthContext.Provider>
   );
-};
+}

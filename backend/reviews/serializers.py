@@ -1,51 +1,46 @@
 from rest_framework import serializers
-from reviews.models import Review
+from .models import Review
+from orders.models import Order
 
 
 class ReviewSerializer(serializers.ModelSerializer):
-    user_email = serializers.ReadOnlyField(source='user.email')
-    product_name = serializers.ReadOnlyField(source='product.name')
-    
+    username = serializers.ReadOnlyField(source='user.username')
+    # Gunakan PrimaryKeyRelatedField agar otomatis menyesuaikan tipe ID (UUID atau Integer)
+    order_id = serializers.PrimaryKeyRelatedField(
+        queryset=Order.objects.all(), 
+        write_only=True, 
+        source='order'
+    )
+
     class Meta:
         model = Review
-        fields = ['id', 'user_email', 'product_name', 'product', 'order',
-                  'rating', 'comment', 'created_at']
-        read_only_fields = ['id', 'created_at', 'user']
-    
-    def validate_rating(self, value):
-        if not 1 <= value <= 5:
-            raise serializers.ValidationError("Rating harus antara 1-5")
-        return value
-    
+        fields = ['id', 'username', 'product', 'order_id', 'rating', 'comment', 'created_at']
+        read_only_fields = ['id', 'username', 'product', 'created_at']
+
+    def validate(self, attrs):
+        user = self.context['request'].user
+        order = attrs.get('order')
+
+        # 1. Pastikan Order adalah milik user yang sedang login
+        if order.buyer != user:
+            raise serializers.ValidationError({"order_id": "Pesanan tidak ditemukan atau bukan milik Anda."})
+
+        # 2. Pastikan status pembayaran pesanan sudah PAID
+        if order.payment_status != Order.PaymentStatus.PAID:
+            raise serializers.ValidationError({"order_id": "Anda hanya dapat mengulas produk dari pesanan yang sudah lunas."})
+
+        # 3. Pastikan pesanan belum pernah diulas
+        if Review.objects.filter(order=order).exists():
+            raise serializers.ValidationError({"order_id": "Pesanan ini sudah pernah diberi ulasan."})
+
+        return attrs
+
     def create(self, validated_data):
-        request = self.context.get('request')
-        if request and request.user.is_authenticated:
-            validated_data['user'] = request.user
+        order = validated_data['order']
         
-        return super().create(validated_data)
-    
-    def validate(self, data):
-        # Prevent duplicate reviews from same user for same product
-        user = self.context.get('request').user if hasattr(self, 'context') else None
-        product_id = data.get('product') or self.initial_data.get('product')
-        
-        if user and product_id:
-            existing = Review.objects.filter(
-                user=user,
-                product_id=product_id
-            ).first()
-            
-            if existing:
-                raise serializers.ValidationError("Anda sudah mereview produk ini")
-        
-        return data
-
-
-class ReviewSimpleSerializer(serializers.ModelSerializer):
-    """Simplified for listing"""
-    user_email = serializers.ReadOnlyField(source='user.email')
-    product_name = serializers.ReadOnlyField(source='product.name')
-    
-    class Meta:
-        model = Review
-        fields = ['id', 'user_email', 'product_name', 'rating', 'comment']
+        review = Review.objects.create(
+            user=self.context['request'].user,
+            product=order.product,
+            **validated_data
+        )
+        return review

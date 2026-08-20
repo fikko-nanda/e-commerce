@@ -1,17 +1,14 @@
 import axios from 'axios';
 
-const API_BASE_URL = 'http://127.0.0.1:8000/api/v1';
-
-// Create axios instance with default config
-const api = axios.create({
-  baseURL: API_BASE_URL,
+const API = axios.create({
+  baseURL: 'http://127.0.0.1:8000/api/v1',
   headers: {
     'Content-Type': 'application/json',
   },
 });
 
-// Add token to requests
-api.interceptors.request.use(
+// Interceptor: sisipkan access token ke setiap request
+API.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem('access_token');
     if (token) {
@@ -22,53 +19,70 @@ api.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
-// Handle response errors: coba refresh token sekali saat 401
+// Interceptor: refresh token otomatis saat 401
 let isRefreshing = false;
-let refreshPromise = null;
+let failedQueue = [];
 
-const refreshAccessToken = async () => {
-  if (!isRefreshing) {
-    isRefreshing = true;
-    refreshPromise = axios
-      .post(`${API_BASE_URL}/auth/refresh/`, {
-        refresh: localStorage.getItem('refresh_token'),
-      })
-      .then((res) => {
-        localStorage.setItem('access_token', res.data.access);
-        return res.data.access;
-      })
-      .finally(() => {
-        isRefreshing = false;
-      });
-  }
-  return refreshPromise;
-};
+function processQueue(error, token = null) {
+  failedQueue.forEach((cb) => (error ? cb.reject(error) : cb.resolve(token)));
+  failedQueue = [];
+}
 
-api.interceptors.response.use(
+API.interceptors.response.use(
   (response) => response,
   async (error) => {
     const originalRequest = error.config;
-    const isAuthCall = originalRequest?.url?.includes('/auth/login') ||
-      originalRequest?.url?.includes('/auth/refresh') ||
-      originalRequest?.url?.includes('/auth/register');
 
-    if (error.response?.status === 401 && !originalRequest._retried && !isAuthCall) {
-      originalRequest._retried = true;
-      try {
-        const newToken = await refreshAccessToken();
-        originalRequest.headers.Authorization = `Bearer ${newToken}`;
-        return api(originalRequest);
-      } catch {
-        // Refresh gagal: logout paksa
-        localStorage.removeItem('access_token');
-        localStorage.removeItem('refresh_token');
-        localStorage.removeItem('user');
-        window.location.href = '/';
-        return Promise.reject(error);
-      }
+    // Jika bukan 401 atau sudah retry, lempar error
+    if (!error.response || error.response.status !== 401 || originalRequest._retry) {
+      return Promise.reject(error);
     }
-    return Promise.reject(error);
+
+    // Jangan refresh untuk endpoint login/register/refresh itu sendiri
+    if (originalRequest.url?.includes('/auth/login') || originalRequest.url?.includes('/auth/register') || originalRequest.url?.includes('/auth/refresh')) {
+      return Promise.reject(error);
+    }
+
+    if (isRefreshing) {
+      return new Promise((resolve, reject) => {
+        failedQueue.push({ resolve, reject });
+      })
+        .then((token) => {
+          originalRequest.headers.Authorization = `Bearer ${token}`;
+          return API(originalRequest);
+        })
+        .catch((err) => Promise.reject(err));
+    }
+
+    originalRequest._retry = true;
+    isRefreshing = true;
+
+    try {
+      const refreshToken = localStorage.getItem('refresh_token');
+      if (!refreshToken) throw new Error('No refresh token');
+
+      const res = await axios.post('http://127.0.0.1:8000/api/v1/auth/refresh/', {
+        refresh: refreshToken,
+      });
+
+      const newToken = res.data.access;
+      localStorage.setItem('access_token', newToken);
+
+      processQueue(null, newToken);
+      originalRequest.headers.Authorization = `Bearer ${newToken}`;
+      return API(originalRequest);
+    } catch (err) {
+      processQueue(err, null);
+      // Refresh gagal — logout
+      localStorage.removeItem('access_token');
+      localStorage.removeItem('refresh_token');
+      localStorage.removeItem('warmart_user');
+      window.location.href = '/';
+      return Promise.reject(err);
+    } finally {
+      isRefreshing = false;
+    }
   }
 );
 
-export default api;
+export default API;

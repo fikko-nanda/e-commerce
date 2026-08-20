@@ -1,49 +1,33 @@
-from rest_framework import viewsets, permissions, status, serializers
-from rest_framework.response import Response
-from orders.models import Order
-from reviews.models import Review
-from reviews.serializers import ReviewSerializer
-
-
-class IsOwnerOrReadOnly(permissions.BasePermission):
-    """Only allow owners to edit/delete their reviews"""
-    
-    def has_object_permission(self, request, view, obj):
-        if request.method in permissions.SAFE_METHODS:
-            return True
-        return obj.user == request.user
+from rest_framework import viewsets, permissions, mixins
+from rest_framework.exceptions import PermissionDenied
+from .models import Review
+from .serializers import ReviewSerializer
 
 
 class ReviewViewSet(viewsets.ModelViewSet):
-    queryset = Review.objects.select_related('user', 'product').all()
+    queryset = Review.objects.all().select_related('user', 'product', 'order')
     serializer_class = ReviewSerializer
-    
+
     def get_permissions(self):
-        if self.action in ['create']:
-            self.permission_classes = [permissions.IsAuthenticated]
-        elif self.action in ['retrieve', 'list']:
-            self.permission_classes = [permissions.AllowAny]
+        # Membaca ulasan bisa dilakukan siapa saja (Public)
+        # Membuat/Mengedit/Menghapus ulasan wajib Login (Authenticated)
+        if self.action in ['list', 'retrieve']:
+            permission_classes = [permissions.AllowAny]
         else:
-            self.permission_classes = [permissions.IsAuthenticated]
-        return super().get_permissions()
-    
+            permission_classes = [permissions.IsAuthenticated]
+        return [permission() for permission in permission_classes]
+
     def get_queryset(self):
-        queryset = Review.objects.select_related('user', 'product')
-        
-        # Filter by product_id if provided
-        product_id = self.request.query_params.get('product', None)
+        queryset = super().get_queryset()
+        # Mendukung filter ulasan berdasarkan product_id di URL query parameter
+        # Contoh: /api/reviews/?product=<product_id>
+        product_id = self.request.query_params.get('product')
         if product_id:
             queryset = queryset.filter(product_id=product_id)
-        
         return queryset
-    
-    def perform_create(self, serializer):
-        user = self.request.user
-        
-        # Prevent duplicate reviews
-        product_id = self.request.data.get('product')
-        existing = Review.objects.filter(user=user, product_id=product_id).first()
-        if existing:
-            raise serializers.ValidationError("Anda sudah mereview produk ini")
-        
-        serializer.save(user=user)
+
+    def perform_destroy(self, instance):
+        # Hanya pemilik ulasan yang boleh menghapus ulasannya sendiri
+        if instance.user != self.request.user:
+            raise PermissionDenied("Anda tidak memiliki izin untuk menghapus ulasan ini.")
+        instance.delete()

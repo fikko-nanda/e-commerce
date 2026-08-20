@@ -1,43 +1,17 @@
-import api from './api';
+import API from './api';
 
-// Reviews Service - API untuk Review Produk
+const reviewService = {
+  /** GET /reviews/ — daftar ulasan. Filter by product: /reviews/?product=<id> */
+  getByProduct: (productId) => API.get(`/reviews/?product=${productId}`),
 
-export const reviewService = {
-  // Get semua reviews (public)
-  getAllReviews: async () => {
-    const response = await api.get('/reviews/');
-    return response.data;
-  },
+  /** GET /reviews/ — semua ulasan */
+  getAll: () => API.get('/reviews/'),
 
-  // Get reviews by product ID
-  getReviewsByProduct: async (productId) => {
-    const response = await api.get(`/reviews/?product=${productId}`);
-    return response.data;
-  },
+  /** POST /reviews/ — buat ulasan baru. Body: {order_id, rating, comment} */
+  create: (data) => API.post('/reviews/', data),
 
-  // Create review baru
-  createReview: async (data) => {
-    const response = await api.post('/reviews/', data);
-    return response.data;
-  },
-
-  // Update review (hanya owner)
-  updateReview: async (id, data) => {
-    const response = await api.put(`/reviews/${id}/`, data);
-    return response.data;
-  },
-
-  // Delete review (hanya owner)
-  deleteReview: async (id) => {
-    const response = await api.delete(`/reviews/${id}/`);
-    return response.data;
-  },
-
-  // Get my review for a specific product
-  getMyReview: async (productId) => {
-    const response = await api.get(`/reviews/?my_product=${productId}`);
-    return response.data;
-  },
+  /** DELETE /reviews/<id>/ — hapus ulasan (hanya pemilik) */
+  delete: (id) => API.delete(`/reviews/${id}/`),
 };
 
 export default reviewService;

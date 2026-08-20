@@ -1,43 +1,23 @@
-import api from './api';
+import API from './api';
 
-// Orders Service - API untuk Order/Pesanan
+const orderService = {
+  /** POST /orders/checkout/ — buat pesanan baru. Return {order, snap_token, redirect_url} */
+  checkout: (data) => API.post('/orders/checkout/', data),
 
-export const orderService = {
-  // Checkout / Buat pesanan baru
-  checkout: async (data) => {
-    const response = await api.post('/orders/checkout/', data);
-    return response.data;
-  },
+  /** GET /orders/ — daftar pesanan pembeli yang login */
+  getMyOrders: () => API.get('/orders/'),
 
-  // Get all my orders (buyer)
-  getMyOrders: async () => {
-    const response = await api.get('/orders/my-orders/');
-    return response.data;
-  },
+  /** GET /orders/store-orders/ — daftar pesanan masuk ke toko seller */
+  getStoreOrders: () => API.get('/orders/store-orders/'),
 
-  // Get order detail by ID
-  getOrderById: async (id) => {
-    const response = await api.get(`/orders/${id}/`);
-    return response.data;
-  },
+  /** GET /orders/<id>/ — detail satu pesanan */
+  getDetail: (id) => API.get(`/orders/${id}/`),
 
-  // Get store's orders (seller view)
-  getStoreOrders: async () => {
-    const response = await api.get('/orders/store-orders/');
-    return response.data;
-  },
+  /** PATCH /orders/<id>/ship/ — seller update resi & status pengiriman */
+  updateShipping: (id, data) => API.patch(`/orders/${id}/ship/`, data),
 
-  // Update shipping status (seller)
-  updateShippingStatus: async (id, status) => {
-    const response = await api.patch(`/orders/${id}/`, { shipping_status: status });
-    return response.data;
-  },
-
-  // Cancel order (buyer)
-  cancelOrder: async (id) => {
-    const response = await api.patch(`/orders/${id}/cancel/`);
-    return response.data;
-  },
+  /** POST /orders/<id>/pay/ — regenerate snap token Midtrans untuk order pending */
+  pay: (id) => API.post(`/orders/${id}/pay/`),
 };
 
 export default orderService;

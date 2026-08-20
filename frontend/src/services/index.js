@@ -1,7 +1,7 @@
-// API Services - Export semua services untuk frontend
-export { default as api } from './api';
-export { authService } from './authService';
-export { productService } from './productService';
-export { orderService } from './orderService';
-export { reviewService } from './reviewService';
-export { chatService, chatWebSocket } from './chatService';
+// Barrel export — import dari satu tempat: import { authService, productService } from '../services'
+export { default as API } from './api';
+export { default as authService } from './authService';
+export { default as storeService } from './storeService';
+export { default as productService } from './productService';
+export { default as orderService } from './orderService';
+export { default as reviewService } from './reviewService';

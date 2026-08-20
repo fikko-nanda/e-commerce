@@ -1,11 +1,10 @@
 import { useState } from 'react';
-import API from '../services/api';
+import { orderService } from '../services';
 import { payWithMidtrans } from '../utils/loadSnap';
 
 export default function CheckoutModal({ product, isOpen, onClose, onSuccess }) {
   const [quantity, setQuantity] = useState(1);
   const [paymentMethod, setPaymentMethod] = useState('midtrans');
-  const [shippingAddress, setShippingAddress] = useState('');
   const [loading, setLoading] = useState(false);
 
   if (!isOpen || !product) return null;
@@ -17,64 +16,31 @@ export default function CheckoutModal({ product, isOpen, onClose, onSuccess }) {
     setLoading(true);
 
     try {
-      const response = await API.post('/orders/checkout/', {
+      const response = await orderService.checkout({
         product_id: product.id,
         quantity: Number(quantity),
         payment_method: paymentMethod,
-        shipping_address: shippingAddress,
       });
 
-      if (!response.data) {
-        throw new Error('Respons server kosong');
-      }
+      setLoading(false);
 
-      if (paymentMethod === 'midtrans') {
-        const snapToken = response.data.snap_token;
-        
-        if (!snapToken) {
-          // Midtrans gagal generate token - fallback ke COD atau alert user
-          alert(response.data.message || 
-                'Midtrans payment gateway belum aktif. Silakan kontak admin.');
-          onSuccess();
-          onClose();
-          return;
-        }
-        
-        setLoading(false);
-        
-        try {
-          await payWithMidtrans(
-            snapToken,
-            () => {
-              alert('Pembayaran Berhasil!');
-              onSuccess();
-              onClose();
-            },
-            () => {
-              alert('Pembayaran Gagal atau dibatalkan');
-              setLoading(false);
-            }
-          );
-        } catch (err) {
-          console.error('Snap error:', err);
-          alert('Gagal membuka popup pembayaran: ' + err.message);
-          setLoading(false);
-        }
+      if (paymentMethod === 'midtrans' && response.data.snap_token) {
+        payWithMidtrans(
+          response.data.snap_token,
+          () => {
+            alert('Pembayaran Berhasil!');
+            onSuccess();
+            onClose();
+          },
+          () => alert('Pembayaran Gagal!')
+        );
       } else {
-        // COD / transfer bank manual
-        alert(response.data.message || 'Pesanan berhasil dibuat!');
+        alert('Pesanan berhasil dibuat!');
         onSuccess();
         onClose();
       }
     } catch (err) {
-      const msg = err.response?.data?.detail ||
-        err.response?.data?.error ||
-        err.response?.data?.[0] ||
-        err.message ||
-        'Gagal membuat pesanan.';
-      
-      console.error('Checkout error:', err);
-      alert(typeof msg === 'string' ? msg : JSON.stringify(msg));
+      alert(err.response?.data?.error || err.response?.data?.detail || JSON.stringify(err.response?.data) || 'Gagal membuat pesanan.');
       setLoading(false);
     }
   };
@@ -117,20 +83,8 @@ export default function CheckoutModal({ product, isOpen, onClose, onSuccess }) {
               className="w-full bg-gray-50 border-2 border-black p-2.5 font-bold text-sm focus:outline-none"
             >
               <option value="midtrans">Midtrans Gateway (QRIS/Gopay/Transfer)</option>
-              <option value="cod">Cash On Delivery (COD)</option>
+              <option value="cod">Bayar di Tempat (COD)</option>
             </select>
-          </div>
-
-          <div>
-            <label className="block text-xs font-black uppercase mb-1">Alamat Pengiriman</label>
-            <textarea 
-              rows={3}
-              value={shippingAddress}
-              onChange={(e) => setShippingAddress(e.target.value)}
-              placeholder="Masukkan alamat lengkap pengiriman..."
-              className="w-full bg-gray-50 border-2 border-black p-2.5 font-bold text-sm focus:outline-none"
-              required
-            />
           </div>
 
           <div className="border-t-4 border-black pt-4 flex justify-between items-center">

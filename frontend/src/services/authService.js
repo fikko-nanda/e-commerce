@@ -1,48 +1,23 @@
-import api from './api';
+import API from './api';
 
-// Auth Service - API untuk Authentication (Login, Register, Profile)
+const authService = {
+  /** POST /auth/register/ — daftar user baru. Return {user, access_token, refresh_token} */
+  register: (data) => API.post('/auth/register/', data),
 
-export const authService = {
-  // Register akun baru
-  register: async (data) => {
-    const response = await api.post('/auth/register/', data);
-    return response.data;
-  },
+  /** POST /auth/login/ — login manual. Return {user, access_token, refresh_token} */
+  login: (data) => API.post('/auth/login/', data),
 
-  // Login dengan email/password
-  login: async (credentials) => {
-    const response = await api.post('/auth/login/', credentials);
-    return response.data;
-  },
+  /** POST /auth/google/ — login via Google. Return {user, access_token, refresh_token} */
+  googleLogin: (data) => API.post('/auth/google/', data),
 
-  // Refresh token JWT
-  refreshToken: async () => {
-    const response = await api.post('/auth/refresh/');
-    return response.data;
-  },
+  /** POST /auth/refresh/ — refresh access token. Return {access} */
+  refresh: (refreshToken) => API.post('/auth/refresh/', { refresh: refreshToken }),
 
-  // Get profile user yang sedang login
-  getProfile: async () => {
-    const response = await api.get('/auth/me/');
-    return response.data;
-  },
+  /** GET /auth/me/ — profil user aktif */
+  getMe: () => API.get('/auth/me/'),
 
-  // Update profile user
-  updateProfile: async (data) => {
-    const response = await api.put('/auth/me/', data);
-    return response.data;
-  },
-
-  // Google Login (optional)
-  googleLogin: async (token) => {
-    const response = await api.post('/auth/google/', { token });
-    return response.data;
-  },
-
-  // Logout (hapus token dari localStorage)
-  logout: () => {
-    localStorage.removeItem('access_token');
-  },
+  /** PATCH /auth/me/ — update profil user */
+  updateMe: (data) => API.patch('/auth/me/', data),
 };
 
 export default authService;

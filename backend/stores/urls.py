@@ -1,11 +1,7 @@
-from django.urls import path, include
-from rest_framework.routers import DefaultRouter
-from stores.views import StoreViewSet, SellerStoreView
-
-router = DefaultRouter()
-router.register(r'', StoreViewSet, basename='store')
+from django.urls import path
+from .views import RegisterSellerView, MyStoreView
 
 urlpatterns = [
-    path('', include(router.urls)),
-    path('register/', SellerStoreView.as_view({'post': 'register'}), name='store-register'),
+    path('register/', RegisterSellerView.as_view(), name='seller_register'),
+    path('me/', MyStoreView.as_view(), name='my_store'),
 ]

@@ -1,10 +1,15 @@
 from django.urls import path
-from orders.views import CheckoutView, MyOrdersView, StoreOrdersView, OrderDetailView, CancelOrderView
+from .views import (
+    CheckoutView, MidtransWebhookView, MyOrdersView,
+    StoreOrdersView, OrderDetailView, UpdateShippingView, OrderPayView
+)
 
 urlpatterns = [
-    path('checkout/', CheckoutView.as_view(), name='order-checkout'),
-    path('', MyOrdersView.as_view(), name='order-list'),
-    path('store-orders/', StoreOrdersView.as_view(), name='store-orders'),
-    path('<str:pk>/', OrderDetailView.as_view(), name='order-detail'),
-    path('<str:pk>/cancel/', CancelOrderView.as_view(), name='order-cancel'),
+    path('', MyOrdersView.as_view(), name='my_orders'),
+    path('checkout/', CheckoutView.as_view(), name='checkout'),
+    path('notification/', MidtransWebhookView.as_view(), name='midtrans_notification'),
+    path('store-orders/', StoreOrdersView.as_view(), name='store_orders'),
+    path('<uuid:pk>/', OrderDetailView.as_view(), name='order_detail'),
+    path('<uuid:pk>/ship/', UpdateShippingView.as_view(), name='update_shipping'),
+    path('<uuid:pk>/pay/', OrderPayView.as_view(), name='order_pay'),
 ]

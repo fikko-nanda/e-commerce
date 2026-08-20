@@ -1,50 +1,39 @@
-import api from './api';
+import API from './api';
 
-// Products Service - API untuk Produk
-
-export const productService = {
-  // Get semua produk (public access)
-  getAllProducts: async (filters = {}) => {
-    const params = new URLSearchParams(filters).toString();
-    const response = await api.get(`/products/?${params}`);
-    return response.data;
+const productService = {
+  /** GET /products/ — daftar semua produk aktif. Support ?category=<kat> */
+  getAll: (category) => {
+    let url = '/products/';
+    if (category && category !== 'all') {
+      url += `?category=${category}`;
+    }
+    return API.get(url);
   },
 
-  // Get product detail by ID
-  getProductById: async (id) => {
-    const response = await api.get(`/products/${id}/`);
-    return response.data;
+  /** GET /products/?mine=true — daftar produk milik toko saya */
+  getMyProducts: () => API.get('/products/?mine=true'),
+
+  /** GET /products/<id>/ — detail satu produk */
+  getDetail: (id) => API.get(`/products/${id}/`),
+
+  /** POST /products/ — tambah produk baru (JSON atau FormData untuk gambar) */
+  create: (data) => {
+    const isFormData = data instanceof FormData;
+    return API.post('/products/', data, isFormData ? {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    } : {});
   },
 
-  // Create product baru (seller only)
-  createProduct: async (data) => {
-    const response = await api.post('/products/', data);
-    return response.data;
+  /** PUT /products/<id>/ — update produk (JSON atau FormData) */
+  update: (id, data) => {
+    const isFormData = data instanceof FormData;
+    return API.put(`/products/${id}/`, data, isFormData ? {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    } : {});
   },
 
-  // Update product (seller only, owner)
-  updateProduct: async (id, data) => {
-    const response = await api.put(`/products/${id}/`, data);
-    return response.data;
-  },
-
-  // Delete product (seller only, owner)
-  deleteProduct: async (id) => {
-    const response = await api.delete(`/products/${id}/`);
-    return response.data;
-  },
-
-  // Filter products by category
-  getProductsByCategory: async (category) => {
-    const response = await api.get(`/products/?category=${category}`);
-    return response.data;
-  },
-
-  // Search products by name
-  searchProducts: async (searchTerm) => {
-    const response = await api.get(`/products/?name__icontains=${searchTerm}`);
-    return response.data;
-  },
+  /** DELETE /products/<id>/ — hapus produk */
+  delete: (id) => API.delete(`/products/${id}/`),
 };
 
 export default productService;
