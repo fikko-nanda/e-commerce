@@ -1,9 +1,9 @@
 import { useState, useContext } from 'react';
 import { AuthContext } from '../context/AuthContext';
-import API from '../services/api';
+import { authService } from '../services';
 
 export default function UserProfile() {
-  const { user } = useContext(AuthContext);
+  const { user, setUser } = useContext(AuthContext);
   const [name, setName] = useState(user?.name || '');
   const [phone, setPhone] = useState(user?.phone || '');
   const [address, setAddress] = useState(user?.address || '');
@@ -14,11 +14,13 @@ export default function UserProfile() {
     setLoading(true);
 
     try {
-      await API.patch('/auth/users/me/', {
-        name,
+      // name adalah property (first_name or username) — kirim sebagai first_name
+      const res = await authService.updateMe({
+        first_name: name,
         phone,
         address,
       });
+      setUser(res.data);
       alert('Profil berhasil diperbarui!');
       setLoading(false);
     } catch (err) {

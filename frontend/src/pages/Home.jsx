@@ -1,57 +1,59 @@
 import { useEffect, useState } from 'react';
-import API from '../services/api';
+import { productService } from '../services';
 import ProductCard from '../components/ProductCard';
 import MarqueeBanner from '../components/MarqueeBanner';
 import CategoryFilter from '../components/CategoryFilter';
-
-const DUMMY_PRODUCTS = [
-  { id: 1, name: 'OVERSIZED T-SHIRT BLACK VOL. 01', price: 189000, stock: 12, store_name: 'WARMART IND', category: 'tshirt' },
-  { id: 2, name: 'HEAVYWEIGHT HOODIE RED NEON', price: 349000, stock: 3, store_name: 'URBAN CORE', category: 'hoodie' },
-  { id: 3, name: 'CARGO PANTS TACTICAL BLACK', price: 279000, stock: 8, store_name: 'STREET LAB', category: 'pants' },
-  { id: 4, name: 'BUCKET HAT STREETWEAR LOGO', price: 99000, stock: 15, store_name: 'WARMART IND', category: 'accessories' },
-];
 
 export default function Home() {
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [sortBy, setSortBy] = useState('newest'); // 'newest' | 'low-to-high' | 'high-to-low'
 
-  useEffect(() => {
-    fetchProducts();
-  }, [selectedCategory]);
-
-  const fetchProducts = () => {
+  const handleCategoryChange = (cat) => {
     setLoading(true);
-    let url = '/products/';
-    if (selectedCategory !== 'all') {
-      url += `?category=${selectedCategory}`;
-    }
+    setSelectedCategory(cat);
+  };
 
-    API.get(url)
+  // Debounce pencarian: tunggu 300ms setelah user berhenti mengetik
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(searchQuery);
+    }, 350);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
+  useEffect(() => {
+    let cancelled = false;
+    productService.getAll(selectedCategory)
       .then((res) => {
-        const dataList = Array.isArray(res.data) 
-          ? res.data 
-          : (Array.isArray(res.data?.results) ? res.data.results : []);
-        setProducts(dataList.length > 0 ? dataList : DUMMY_PRODUCTS);
+        if (cancelled) return;
+        const dataList = Array.isArray(res.data)
+          ? res.data
+          : (Array.isArray(res.data?.data) ? res.data.data : (Array.isArray(res.data?.results) ? res.data.results : []));
+        setProducts(dataList);
         setLoading(false);
       })
       .catch(() => {
-        setProducts(DUMMY_PRODUCTS);
+        if (cancelled) return;
+        setProducts([]);
         setLoading(false);
       });
-  };
 
-  // Filterberdasarkan Kata Kunci Pencarian & Kategori
+    return () => { cancelled = true; };
+  }, [selectedCategory]);
+
+  // Filter berdasarkan kata kunci pencarian (client-side, debounced) + sort
   const filteredProducts = products
-    .filter((p) => selectedCategory === 'all' || p.category === selectedCategory)
-    .filter((p) => p.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                   (p.store_name && p.store_name.toLowerCase().includes(searchQuery.toLowerCase())))
+    .filter((p) => p.name.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
+                   (p.store_name && p.store_name.toLowerCase().includes(debouncedSearch.toLowerCase())))
     .sort((a, b) => {
       if (sortBy === 'low-to-high') return Number(a.price) - Number(b.price);
       if (sortBy === 'high-to-low') return Number(b.price) - Number(a.price);
-      return b.id - a.id;
+      // Terbaru: urutkan berdasarkan created_at (bukan id — id adalah UUID string)
+      return new Date(b.created_at) - new Date(a.created_at);
     });
 
   return (
@@ -90,7 +92,7 @@ export default function Home() {
           <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 my-6">
             <CategoryFilter 
               selectedCategory={selectedCategory} 
-              onSelectCategory={setSelectedCategory} 
+              onSelectCategory={handleCategoryChange} 
             />
 
             <div className="flex flex-col sm:flex-row items-center gap-3">
@@ -105,7 +107,7 @@ export default function Home() {
                 />
                 {searchQuery && (
                   <button 
-                    onClick={() => setSearchQuery('')}
+                    onClick={() => { setSearchQuery(''); setDebouncedSearch(''); }}
                     className="absolute right-2 top-2 text-xs font-black text-gray-500 hover:text-black"
                   >
                     ✕

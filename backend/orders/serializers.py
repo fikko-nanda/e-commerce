@@ -22,13 +22,30 @@ class OrderCreateSerializer(serializers.Serializer):
 
 class OrderDetailSerializer(serializers.ModelSerializer):
     product_name = serializers.ReadOnlyField(source='product.name')
+    product_image = serializers.SerializerMethodField()
     store_name = serializers.ReadOnlyField(source='store.store_name')
+    buyer_email = serializers.ReadOnlyField(source='buyer.email')
+    buyer_username = serializers.ReadOnlyField(source='buyer.username')
+    buyer_address = serializers.ReadOnlyField(source='buyer.address')
 
     class Meta:
         model = Order
         fields = [
-            'id', 'buyer', 'store', 'store_name', 'product', 'product_name',
+            'id', 'buyer', 'buyer_email', 'buyer_username', 'buyer_address',
+            'store', 'store_name', 'product', 'product_name', 'product_image',
             'quantity', 'total_price', 'payment_method', 'payment_status',
-            'shipping_status', 'created_at'
+            'shipping_status', 'courier_name', 'tracking_number', 'created_at'
         ]
         read_only_fields = fields
+
+    def get_product_image(self, obj):
+        try:
+            img = obj.product.image
+            if img and img.url:
+                request = self.context.get('request')
+                if request:
+                    return request.build_absolute_uri(img.url)
+                return img.url
+        except Exception:
+            return None
+        return None

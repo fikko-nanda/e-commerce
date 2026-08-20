@@ -1,11 +1,10 @@
 import { useState } from 'react';
-import API from '../services/api';
+import { orderService } from '../services';
 import { payWithMidtrans } from '../utils/loadSnap';
 
 export default function CheckoutModal({ product, isOpen, onClose, onSuccess }) {
   const [quantity, setQuantity] = useState(1);
   const [paymentMethod, setPaymentMethod] = useState('midtrans');
-  const [shippingAddress, setShippingAddress] = useState('');
   const [loading, setLoading] = useState(false);
 
   if (!isOpen || !product) return null;
@@ -17,11 +16,10 @@ export default function CheckoutModal({ product, isOpen, onClose, onSuccess }) {
     setLoading(true);
 
     try {
-      const response = await API.post('/orders/', {
-        product: product.id,
+      const response = await orderService.checkout({
+        product_id: product.id,
         quantity: Number(quantity),
         payment_method: paymentMethod,
-        shipping_address: shippingAddress,
       });
 
       setLoading(false);
@@ -42,7 +40,7 @@ export default function CheckoutModal({ product, isOpen, onClose, onSuccess }) {
         onClose();
       }
     } catch (err) {
-      alert(err.response?.data?.detail || 'Gagal membuat pesanan.');
+      alert(err.response?.data?.error || err.response?.data?.detail || JSON.stringify(err.response?.data) || 'Gagal membuat pesanan.');
       setLoading(false);
     }
   };
@@ -85,20 +83,8 @@ export default function CheckoutModal({ product, isOpen, onClose, onSuccess }) {
               className="w-full bg-gray-50 border-2 border-black p-2.5 font-bold text-sm focus:outline-none"
             >
               <option value="midtrans">Midtrans Gateway (QRIS/Gopay/Transfer)</option>
-              <option value="bank_transfer">Transfer Bank Manual</option>
+              <option value="cod">Bayar di Tempat (COD)</option>
             </select>
-          </div>
-
-          <div>
-            <label className="block text-xs font-black uppercase mb-1">Alamat Pengiriman</label>
-            <textarea 
-              rows={3}
-              value={shippingAddress}
-              onChange={(e) => setShippingAddress(e.target.value)}
-              placeholder="Masukkan alamat lengkap pengiriman..."
-              className="w-full bg-gray-50 border-2 border-black p-2.5 font-bold text-sm focus:outline-none"
-              required
-            />
           </div>
 
           <div className="border-t-4 border-black pt-4 flex justify-between items-center">

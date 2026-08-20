@@ -11,7 +11,7 @@ export const loadSnapScript = () => {
     script.src = 'https://app.sandbox.midtrans.com/snap/snap.js';
     script.id = 'midtrans-snap-script';
     // Ganti dengan Client Key Midtrans Sandbox milik Anda dari Dashboard Midtrans
-    script.setAttribute('data-client-key', 'SB-Mid-client-YOUR_CLIENT_KEY');
+    script.setAttribute('data-client-key', import.meta.env.VITE_MIDTRANS_CLIENT_KEY || 'SB-Mid-client-PLACEHOLDER');
 
     script.onload = () => resolve(true);
     script.onerror = () => resolve(false);
@@ -29,14 +29,14 @@ export const payWithMidtrans = async (snapToken, onSuccess, onError) => {
   }
 
   window.snap.pay(snapToken, {
-    onSuccess: function (result) {
-      if (onSuccess) onSuccess(result);
+    onSuccess: function () {
+      if (onSuccess) onSuccess();
     },
-    onPending: function (result) {
+    onPending: function () {
       alert('Pembayaran tertunda. Silakan selesaikan transaksi Anda.');
     },
-    onError: function (result) {
-      if (onError) onError(result);
+    onError: function () {
+      if (onError) onError();
     },
     onClose: function () {
       alert('Anda menutup halaman pembayaran sebelum selesai.');
