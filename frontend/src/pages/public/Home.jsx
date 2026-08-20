@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { productService } from '../../services';
 import ProductCard from '../../components/ProductCard';
 import MarqueeBanner from '../../components/MarqueeBanner';
@@ -91,11 +92,9 @@ export default function Home() {
           ? res.data.results
           : [];
 
-        // Jika API mengembalikan array yang tidak kosong, pakai data API
         if (dataList && dataList.length > 0) {
           setProducts(dataList);
         } else {
-          // Fallback ke data dummy jika backend kosong
           const filteredDummy =
             selectedCategory === 'all'
               ? DUMMY_PRODUCTS
@@ -106,7 +105,6 @@ export default function Home() {
       })
       .catch(() => {
         if (cancelled) return;
-        // Fallback ke data dummy jika API gagal / offline
         const filteredDummy =
           selectedCategory === 'all'
             ? DUMMY_PRODUCTS
@@ -138,8 +136,8 @@ export default function Home() {
       <MarqueeBanner />
 
       <div className="max-w-7xl mx-auto px-6 py-12">
-        {/* Banner Hero */}
-        <div className="bg-yellow-300 border-4 border-black p-8 md:p-12 shadow-brutal-lg mb-12 flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
+        {/* Banner Hero Utama */}
+        <div className="bg-yellow-300 border-4 border-black p-8 md:p-12 shadow-brutal-lg mb-8 flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
           <div className="max-w-xl">
             <span className="bg-black text-white text-[10px] font-black px-2.5 py-1 uppercase tracking-widest inline-block mb-3">
               Koleksi Terbaru 2026
@@ -148,7 +146,7 @@ export default function Home() {
               PANGGUNG STREETWEAR LOKAL.
             </h1>
             <p className="text-sm font-bold leading-relaxed text-black/80">
-              Dapatkan produk autentik langsung dari kreator independen terbaik.
+              Dapatkan produk autentik langsung dari kreasor independen terbaik.
             </p>
           </div>
           <a
@@ -157,6 +155,32 @@ export default function Home() {
           >
             Jelajahi Sekarang →
           </a>
+        </div>
+
+        {/* BANNER CTA: PENDAFTARAN SELLER BARU */}
+        <div className="bg-black text-white border-4 border-black p-6 md:p-8 shadow-brutal mb-12 flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
+          <div className="space-y-2 max-w-2xl">
+            <div className="flex items-center gap-2">
+              <span className="bg-yellow-300 text-black text-[10px] font-black px-2 py-0.5 uppercase tracking-wider">
+                Verifikasi Ketat
+              </span>
+              <span className="text-yellow-300 font-mono text-xs font-bold">
+                ● Membuka Batch Registrasi Penjual
+              </span>
+            </div>
+            <h2 className="text-2xl md:text-3xl font-black uppercase tracking-tight">
+              Punya Brand / Produk Sendiri?
+            </h2>
+            <p className="text-xs text-gray-300 font-medium leading-relaxed">
+              Bergabunglah menjadi seller terverifikasi di WARMART. Siapkan KTP, NPWP, dan data legalitas toko Anda untuk proses kurasi platform.
+            </p>
+          </div>
+          <Link
+            to="/seller/register"
+            className="bg-yellow-300 text-black font-black px-6 py-3 text-xs uppercase tracking-wider border-2 border-white hover:bg-white transition whitespace-nowrap shadow-brutal"
+          >
+            Daftar Jadi Seller →
+          </Link>
         </div>
 
         {/* Section Katalog */}

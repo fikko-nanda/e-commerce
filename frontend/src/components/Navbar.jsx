@@ -1,5 +1,5 @@
 import { useContext, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
 import { CartContext } from '../context/CartContext';
 import LoginModal from './LoginModal';
@@ -8,8 +8,18 @@ import CartDrawer from './CartDrawer';
 export default function Navbar() {
   const { user, logout } = useContext(AuthContext) || {};
   const { totalItems = 0 } = useContext(CartContext) || {};
+  
   const [isLoginOpen, setIsLoginOpen] = useState(false);
   const [isCartOpen, setIsCartOpen] = useState(false);
+  const [isProfileOpen, setIsProfileOpen] = useState(false);
+  
+  const navigate = useNavigate();
+
+  const handleLogout = () => {
+    setIsProfileOpen(false);
+    if (logout) logout();
+    navigate('/');
+  };
 
   return (
     <>
@@ -41,22 +51,54 @@ export default function Navbar() {
           </button>
 
           {user ? (
-            <div className="flex items-center gap-3">
-              <Link 
-                to="/user/dashboard" 
-                className="font-black text-xs uppercase bg-gray-100 border-2 border-black px-3 py-2 shadow-brutal"
-              >
-                👤 {user.email?.split('@')[0]}
-              </Link>
+            /* Menu Profile User dengan Dropdown */
+            <div className="relative">
               <button 
-                onClick={logout} 
-                className="bg-red-500 text-white text-xs font-black px-3 py-2 uppercase border-2 border-black shadow-brutal"
+                type="button"
+                onClick={() => setIsProfileOpen(!isProfileOpen)}
+                className="font-black text-xs uppercase bg-gray-100 border-2 border-black px-3 py-2 shadow-brutal hover:bg-yellow-300 transition flex items-center gap-2 cursor-pointer"
               >
-                Keluar
+                👤 {user.first_name || user.username || user.email?.split('@')[0]}
               </button>
+
+              {/* Popup Dropdown Profile */}
+              {isProfileOpen && (
+                <div 
+                  className="absolute right-0 mt-2 w-52 bg-white border-4 border-black shadow-brutal-lg z-50"
+                  onClick={() => setIsProfileOpen(false)}
+                >
+                  <div className="p-3 border-b-2 border-black bg-yellow-100">
+                    <p className="text-[10px] font-black uppercase text-gray-600">Email Akun</p>
+                    <p className="text-xs font-black truncate">{user.email}</p>
+                  </div>
+
+                  <Link 
+                    to="/profile" 
+                    className="block px-4 py-2.5 text-xs font-black uppercase hover:bg-yellow-300 border-b-2 border-black transition"
+                  >
+                    ⚙️ Pengaturan Profil
+                  </Link>
+
+                  <Link 
+                    to="/user/dashboard" 
+                    className="block px-4 py-2.5 text-xs font-black uppercase hover:bg-yellow-300 border-b-2 border-black transition"
+                  >
+                    📊 Dashboard Saya
+                  </Link>
+
+                  <button 
+                    type="button"
+                    onClick={handleLogout} 
+                    className="w-full text-left px-4 py-2.5 text-xs font-black uppercase text-red-600 hover:bg-red-500 hover:text-white transition cursor-pointer"
+                  >
+                    🚪 Keluar
+                  </button>
+                </div>
+              )}
             </div>
           ) : (
             <button 
+              type="button"
               onClick={() => setIsLoginOpen(true)}
               className="bg-black text-white text-xs font-black px-4 py-2 uppercase border-2 border-black shadow-brutal hover:bg-yellow-400 hover:text-black transition"
             >

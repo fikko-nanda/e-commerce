@@ -15,10 +15,13 @@ import NotFound from './pages/public/NotFound';
 import StoreProfile from './pages/public/StoreProfile';
 
 import SellerDashboard from './pages/seller/SellerDashboard';
+import RegisterSeller from './pages/seller/RegisterSeller';
+
 import UserDashboard from './pages/user/UserDashboard';
+import UserProfile from './pages/user/UserProfile';
 
 function AppContent() {
-  const { user } = useContext(AuthContext);
+  const { user } = useContext(AuthContext) || {};
   const isLoggedIn = Boolean(user && (user.id || user.email || Object.keys(user).length > 0));
 
   return (
@@ -29,15 +32,19 @@ function AppContent() {
           <Routes>
             <Route path="/" element={<Home />} />
             <Route path="/product/:id" element={<ProductDetail />} />
+            <Route path="/profile" element={<UserProfile />} />
+            <Route path="/seller/register" element={<RegisterSeller />} />
             <Route path="/seller" element={<SellerDashboard />} />
             <Route path="/user/dashboard" element={<UserDashboard />} />
-            <Route path="*" element={<NotFound />} />
             <Route path="/store/:storeName" element={<StoreProfile />} />
+            
+            {/* Catch-all 404 Route */}
+            <Route path="*" element={<NotFound />} />
           </Routes>
         </main>
         <Footer />
-        
-        {/* 🔴 ChatDrawer HANYA muncul jika user sudah login */}
+
+        {/* ChatDrawer hanya aktif jika pengguna terautentikasi */}
         {isLoggedIn && <ChatDrawer />}
       </div>
     </Router>
