@@ -1,8 +1,9 @@
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status, permissions, serializers
+from core.permissions import IsAdminRole
 from .models import Store
-from .serializers import StoreRegistrationSerializer
+from .serializers import StoreRegistrationSerializer, AdminStoreSerializer
 
 
 class StoreSerializer(serializers.ModelSerializer):
@@ -59,3 +60,64 @@ class MyStoreView(APIView):
         if not store:
             return Response({'store': None}, status=status.HTTP_200_OK)
         return Response({'store': StoreSerializer(store).data}, status=status.HTTP_200_OK)
+
+
+# ============================================================
+# ADMIN: Manajemen Toko / Seller
+# ============================================================
+
+
+class AdminStoreListView(APIView):
+    """GET /stores/admin/ — daftar seluruh toko (hanya admin)."""
+    permission_classes = [IsAdminRole]
+
+    def get(self, request):
+        stores = Store.objects.select_related('user').order_by('-created_at')
+        status_filter = request.query_params.get('status')
+        if status_filter:
+            stores = stores.filter(status=status_filter)
+        serializer = AdminStoreSerializer(stores, many=True)
+        return Response({'data': serializer.data}, status=status.HTTP_200_OK)
+
+
+class AdminStoreStatusView(APIView):
+    """PATCH /stores/admin/<id>/status/ — ubah status toko (hanya admin)."""
+    permission_classes = [IsAdminRole]
+
+    VALID_STATUSES = {
+        'active': Store.Status.ACTIVE,
+        'pending_review': Store.Status.PENDING_REVIEW,
+        'rejected': Store.Status.REJECTED,
+        'suspended': Store.Status.SUSPENDED,
+    }
+
+    def patch(self, request, pk):
+        try:
+            store = Store.objects.select_related('user').get(pk=pk)
+        except Store.DoesNotExist:
+            return Response({'error': 'Toko tidak ditemukan.'}, status=status.HTTP_404_NOT_FOUND)
+
+        new_status = request.data.get('status')
+        if new_status not in self.VALID_STATUSES:
+            return Response(
+                {'error': 'Status tidak valid. Pilih: active, pending_review, rejected, atau suspended.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        store.status = self.VALID_STATUSES[new_status]
+        store.save(update_fields=['status'])
+
+        # Sinkronkan role user: seller hanya jika toko aktif
+        user = store.user
+        if store.status == Store.Status.ACTIVE:
+            user.role = 'seller'
+        elif store.status == Store.Status.SUSPENDED and user.role == 'seller':
+            # Turunkan role seller jika tokonya disuspend
+            user.role = 'buyer'
+        user.save(update_fields=['role'])
+
+        return Response({
+            'status': 'success',
+            'message': f'Toko {store.store_name} kini berstatus: {store.status}.',
+            'store': AdminStoreSerializer(store).data
+        }, status=status.HTTP_200_OK)

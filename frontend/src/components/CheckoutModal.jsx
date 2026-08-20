@@ -9,95 +9,112 @@ export default function CheckoutModal({ product, isOpen, onClose, onSuccess }) {
 
   if (!isOpen || !product) return null;
 
-  const totalPrice = Number(product.price) * quantity;
-
-  const handleCheckout = async (e) => {
+  const handleCheckoutSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
 
     try {
-      const response = await orderService.checkout({
+      const payload = {
         product_id: product.id,
-        quantity: Number(quantity),
+        quantity: quantity,
         payment_method: paymentMethod,
-      });
+        shipping_address: 'Alamat Pengiriman Default',
+      };
 
-      setLoading(false);
+      const res = await orderService.checkout(payload);
+      const { order, snap_token } = res.data;
 
-      if (paymentMethod === 'midtrans' && response.data.snap_token) {
+      if (paymentMethod === 'midtrans' && snap_token) {
         payWithMidtrans(
-          response.data.snap_token,
-          () => {
-            alert('Pembayaran Berhasil!');
-            onSuccess();
-            onClose();
+          snap_token,
+          async () => {
+            try {
+              // Kirim sinyal ke backend Django bahwa pembayaran Midtrans berhasil
+              await orderService.markSuccess(order.id);
+            } catch (err) {
+              console.error('Gagal memperbarui status ke PAID:', err);
+            } finally {
+              onClose();
+              if (onSuccess) onSuccess(); // Mengarahkan ke /user/dashboard
+            }
           },
-          () => alert('Pembayaran Gagal!')
+          () => {
+            alert('Pembayaran Gagal atau Dibatalkan.');
+            setLoading(false);
+          }
         );
       } else {
-        alert('Pesanan berhasil dibuat!');
-        onSuccess();
+        alert('Pesanan COD Berhasil Dibuat!');
         onClose();
+        if (onSuccess) onSuccess();
       }
     } catch (err) {
-      alert(err.response?.data?.error || err.response?.data?.detail || JSON.stringify(err.response?.data) || 'Gagal membuat pesanan.');
+      alert(err.response?.data?.error || 'Gagal melakukan checkout');
       setLoading(false);
     }
   };
 
   return (
-    <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
-      <div className="bg-white border-4 border-black p-8 max-w-lg w-full relative shadow-brutal-lg">
-        <button onClick={onClose} className="absolute top-4 right-4 text-xl font-black bg-red-500 text-white px-2.5 py-0.5 border-2 border-black hover:bg-black">
-          ✕
-        </button>
-        
-        <h3 className="text-2xl font-black uppercase tracking-tighter mb-4 border-b-4 border-black pb-2">
+    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+      <div className="bg-white border-4 border-black p-6 max-w-md w-full shadow-brutal-lg">
+        <h3 className="text-xl font-black uppercase mb-4 border-b-2 border-black pb-2">
           Checkout Produk
         </h3>
-        
-        <div className="bg-yellow-300 p-4 border-2 border-black mb-6 shadow-brutal">
-          <h4 className="font-black text-sm uppercase">{product.name}</h4>
-          <p className="text-xs font-bold text-black/70">Harga Satuan: Rp {Number(product.price).toLocaleString('id-ID')}</p>
-        </div>
 
-        <form onSubmit={handleCheckout} className="space-y-4">
+        <form onSubmit={handleCheckoutSubmit} className="space-y-4">
           <div>
-            <label className="block text-xs font-black uppercase mb-1">Jumlah</label>
-            <input 
-              type="number" 
-              min="1" 
-              max={product.stock}
+            <p className="font-black text-sm uppercase">{product.name}</p>
+            <p className="text-xs font-bold text-gray-500">
+              Rp {Number(product.price).toLocaleString('id-ID')} / item
+            </p>
+          </div>
+
+          <div>
+            <label className="block font-black text-xs uppercase mb-1">Jumlah:</label>
+            <input
+              type="number"
+              min="1"
+              max={product.stock || 99}
               value={quantity}
-              onChange={(e) => setQuantity(e.target.value)}
-              className="w-full bg-gray-50 border-2 border-black p-2.5 font-bold text-sm focus:outline-none"
-              required
+              onChange={(e) => setQuantity(Number(e.target.value))}
+              className="w-full border-2 border-black p-2 font-bold text-sm"
             />
           </div>
 
           <div>
-            <label className="block text-xs font-black uppercase mb-1">Metode Pembayaran</label>
-            <select 
+            <label className="block font-black text-xs uppercase mb-1">Metode Pembayaran:</label>
+            <select
               value={paymentMethod}
               onChange={(e) => setPaymentMethod(e.target.value)}
-              className="w-full bg-gray-50 border-2 border-black p-2.5 font-bold text-sm focus:outline-none"
+              className="w-full border-2 border-black p-2 font-bold text-sm bg-white"
             >
-              <option value="midtrans">Midtrans Gateway (QRIS/Gopay/Transfer)</option>
-              <option value="cod">Bayar di Tempat (COD)</option>
+              <option value="midtrans">Midtrans (QRIS/Transfer/GoPay)</option>
+              <option value="cod">Cash On Delivery (COD)</option>
             </select>
           </div>
 
-          <div className="border-t-4 border-black pt-4 flex justify-between items-center">
-            <div>
-              <span className="text-[10px] font-black uppercase text-gray-500 block">TOTAL BAYAR</span>
-              <span className="text-2xl font-black">Rp {totalPrice.toLocaleString('id-ID')}</span>
-            </div>
-            <button 
-              type="submit" 
+          <div className="pt-2 border-t-2 border-black flex justify-between items-center">
+            <span className="font-black text-xs uppercase">Total:</span>
+            <span className="font-black text-lg bg-yellow-300 px-2 border border-black">
+              Rp {(product.price * quantity).toLocaleString('id-ID')}
+            </span>
+          </div>
+
+          <div className="flex gap-2 pt-2">
+            <button
+              type="button"
+              onClick={onClose}
               disabled={loading}
-              className="bg-black text-white font-black px-6 py-3 uppercase tracking-wider border-2 border-black shadow-brutal hover:bg-green-400 hover:text-black transition disabled:bg-gray-300"
+              className="flex-1 bg-gray-200 font-black text-xs uppercase py-2.5 border-2 border-black"
             >
-              {loading ? 'Memproses...' : 'Bayar Sekarang'}
+              Batal
+            </button>
+            <button
+              type="submit"
+              disabled={loading}
+              className="flex-1 bg-black text-white font-black text-xs uppercase py-2.5 border-2 border-black hover:bg-green-400 hover:text-black transition"
+            >
+              {loading ? 'Memproses...' : 'Lanjut Bayar'}
             </button>
           </div>
         </form>

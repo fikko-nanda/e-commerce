@@ -55,6 +55,7 @@ export function AuthProvider({ children }) {
     localStorage.removeItem('refresh_token');
     localStorage.removeItem('warmart_user');
     setUser(null);
+    localStorage.removeItem('warmart_user');
   };
 
   return (

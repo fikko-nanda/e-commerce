@@ -9,6 +9,8 @@ class Order(models.Model):
         MIDTRANS = 'midtrans', 'Midtrans Payment Gateway'
         COD = 'cod', 'Cash On Delivery'
 
+    shipping_address = models.TextField(null=True, blank=True)
+
     class PaymentStatus(models.TextChoices):
         PENDING = 'pending', 'Pending'
         PAID = 'paid', 'Paid'

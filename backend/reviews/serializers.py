@@ -5,6 +5,8 @@ from orders.models import Order
 
 class ReviewSerializer(serializers.ModelSerializer):
     username = serializers.ReadOnlyField(source='user.username')
+    product_name = serializers.ReadOnlyField(source='product.name')
+    store_name = serializers.ReadOnlyField(source='product.store.store_name')
     # Gunakan PrimaryKeyRelatedField agar otomatis menyesuaikan tipe ID (UUID atau Integer)
     order_id = serializers.PrimaryKeyRelatedField(
         queryset=Order.objects.all(), 
@@ -14,8 +16,8 @@ class ReviewSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Review
-        fields = ['id', 'username', 'product', 'order_id', 'rating', 'comment', 'created_at']
-        read_only_fields = ['id', 'username', 'product', 'created_at']
+        fields = ['id', 'username', 'product', 'product_name', 'store_name', 'order_id', 'rating', 'comment', 'created_at']
+        read_only_fields = ['id', 'username', 'product', 'product_name', 'store_name', 'created_at']
 
     def validate(self, attrs):
         user = self.context['request'].user

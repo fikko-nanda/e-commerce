@@ -1,3 +1,4 @@
+import time
 import hashlib
 import midtransclient
 from django.conf import settings
@@ -14,6 +15,7 @@ class CheckoutView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def post(self, request):
+        shipping_address = request.data.get('shipping_address') or 'Alamat tidak diisi / Ambil di tempat'
         serializer = OrderCreateSerializer(data=request.data)
         if not serializer.is_valid():
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
@@ -36,7 +38,8 @@ class CheckoutView(APIView):
             quantity=data['quantity'],
             total_price=total_price,
             payment_method=data['payment_method'],
-            payment_status=Order.PaymentStatus.PENDING
+            payment_status=Order.PaymentStatus.PENDING,
+            shipping_address=shipping_address,
         )
 
         product.stock -= data['quantity']
@@ -57,9 +60,12 @@ class CheckoutView(APIView):
                 server_key=settings.MIDTRANS_SERVER_KEY
             )
 
+            # Suffix timestamp agar order_id Midtrans unik setiap checkout
+            midtrans_order_id = f"{order.id}-{int(time.time())}"
+
             param = {
                 "transaction_details": {
-                    "order_id": str(order.id),
+                    "order_id": midtrans_order_id,
                     "gross_amount": int(total_price)
                 },
                 "customer_details": {
@@ -105,14 +111,17 @@ class MidtransWebhookView(APIView):
         transaction_status = data.get('transaction_status')
         fraud_status = data.get('fraud_status')
 
+        # Verifikasi signature key Midtrans
         raw_signature = f"{order_id}{status_code}{gross_amount}{settings.MIDTRANS_SERVER_KEY}"
         calc_signature = hashlib.sha512(raw_signature.encode('utf-8')).hexdigest()
 
         if calc_signature != signature_key:
             return Response({'error': 'Invalid Signature Key'}, status=status.HTTP_400_BAD_REQUEST)
 
+        real_order_id = order_id.rsplit('-', 1)[0] if '-' in str(order_id) else order_id
+
         try:
-            order = Order.objects.get(id=order_id)
+            order = Order.objects.get(id=real_order_id)
         except Order.DoesNotExist:
             return Response({'error': 'Order ID tidak ditemukan'}, status=status.HTTP_404_NOT_FOUND)
 
@@ -125,7 +134,6 @@ class MidtransWebhookView(APIView):
             if order.payment_status != Order.PaymentStatus.FAILED:
                 order.product.stock += order.quantity
                 order.product.save()
-
             order.payment_status = Order.PaymentStatus.FAILED
         elif transaction_status == 'pending':
             order.payment_status = Order.PaymentStatus.PENDING
@@ -135,11 +143,39 @@ class MidtransWebhookView(APIView):
 
 
 class MyOrdersView(APIView):
-    """GET /orders/ — daftar pesanan pembeli yang login."""
+    """GET /orders/ — daftar pesanan pembeli yang login + auto-sync status Midtrans."""
     permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request):
         orders = Order.objects.filter(buyer=request.user).select_related('store', 'product').order_by('-created_at')
+
+        # Auto-sync status ke Midtrans jika ada order yang masih PENDING
+        if getattr(settings, 'MIDTRANS_SERVER_KEY', None):
+            try:
+                snap = midtransclient.Snap(
+                    is_production=getattr(settings, 'MIDTRANS_IS_PRODUCTION', False),
+                    server_key=settings.MIDTRANS_SERVER_KEY
+                )
+
+                for order in orders:
+                    if order.payment_status == Order.PaymentStatus.PENDING and order.payment_method == Order.PaymentMethod.MIDTRANS:
+                        try:
+                            # 1. Coba pencarian status dengan UUID murni
+                            status_resp = snap.transactions.notification(str(order.id))
+                            trx_status = status_resp.get('transaction_status')
+                            fraud_status = status_resp.get('fraud_status')
+
+                            if trx_status in ['capture', 'settlement'] and fraud_status != 'challenge':
+                                order.payment_status = Order.PaymentStatus.PAID
+                                order.save()
+                            elif trx_status in ['cancel', 'deny', 'expire']:
+                                order.payment_status = Order.PaymentStatus.FAILED
+                                order.save()
+                        except Exception:
+                            pass
+            except Exception as e:
+                print(f"Error Midtrans Sync: {str(e)}")
+
         serializer = OrderDetailSerializer(orders, many=True, context={'request': request})
         return Response({'data': serializer.data}, status=status.HTTP_200_OK)
 
@@ -214,9 +250,11 @@ class OrderPayView(APIView):
             server_key=settings.MIDTRANS_SERVER_KEY
         )
 
+        midtrans_order_id = f"{order.id}-{int(time.time())}"
+
         param = {
             "transaction_details": {
-                "order_id": str(order.id),
+                "order_id": midtrans_order_id,
                 "gross_amount": int(order.total_price)
             },
             "customer_details": {
@@ -240,3 +278,18 @@ class OrderPayView(APIView):
             }, status=status.HTTP_200_OK)
         except Exception as e:
             return Response({'error': f'Midtrans Error: {str(e)}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class OrderPaySuccessView(APIView):
+    """POST /orders/<id>/success/ — Dipanggil frontend ketika pembayaran Snap sukses"""
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request, pk):
+        order = get_object_or_404(Order, pk=pk, buyer=request.user)
+        if order.payment_status == Order.PaymentStatus.PENDING:
+            order.payment_status = Order.PaymentStatus.PAID
+            order.save()
+        return Response({
+            'status': 'success',
+            'data': OrderDetailSerializer(order, context={'request': request}).data
+        }, status=status.HTTP_200_OK)
