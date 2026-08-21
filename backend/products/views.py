@@ -45,7 +45,7 @@ class ProductListCreateView(APIView):
         if cached_data is not None:
             return Response({'source': 'cache', 'data': cached_data}, status=status.HTTP_200_OK)
 
-        products = Product.objects.filter(is_active=True, stock__gt=0).select_related('store')
+        products = Product.objects.filter(is_active=True, stock__gt=0, store__status='active').select_related('store')
         if category:
             products = products.filter(category__iexact=category)
         serializer = ProductSerializer(products, many=True)
@@ -57,6 +57,9 @@ class ProductListCreateView(APIView):
     def post(self, request):
         if not hasattr(request.user, 'store'):
             return Response({'error': 'Hanya pemilik toko yang dapat menambahkan produk.'}, status=status.HTTP_403_FORBIDDEN)
+
+        if request.user.store.status != 'active':
+            return Response({'error': 'Toko Anda belum aktif. Produk hanya bisa ditambahkan oleh toko yang sudah aktif.'}, status=status.HTTP_403_FORBIDDEN)
 
         # Dukung multipart (upload gambar) & JSON
         data = request.data
