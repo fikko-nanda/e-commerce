@@ -1,8 +1,51 @@
 import { useState, useContext, useEffect } from 'react';
 import { AuthContext } from '../../context/AuthContext';
+import { useToast } from '../../context/ToastContext';
+import { storeService, productService, orderService } from '../../services';
+
+const API_ORIGIN = 'http://127.0.0.1:8000';
+
+function toAbsoluteUrl(url) {
+  if (!url) return '';
+  return url.startsWith('http') ? url : `${API_ORIGIN}${url}`;
+}
+
+function normalizeProduct(p) {
+  return {
+    id: p.id,
+    name: p.name,
+    price: Number(p.price || 0),
+    stock: Number(p.stock || 0),
+    category: p.category || 'tshirt',
+    description: p.description || '',
+    image: toAbsoluteUrl(p.image),
+  };
+}
+
+function getOrderStatus(order) {
+  if (order.shipping_status === 'shipped') return 'Dikirim';
+  if (order.shipping_status === 'delivered') return 'Selesai';
+  if (order.payment_status === 'paid') return 'Perlu Dikirim';
+  const map = { pending: 'Pending', failed: 'Gagal', expired: 'Kadaluarsa' };
+  return map[order.payment_status] || 'Pending';
+}
+
+function normalizeOrder(o) {
+  return {
+    id: o.id,
+    customer: o.buyer_username || o.buyer_email || 'Pembeli',
+    items: `${o.product_name} (${o.quantity} pcs)`,
+    total: Number(o.total_price || 0),
+    status: getOrderStatus(o),
+    shipping_status: o.shipping_status,
+    payment_status: o.payment_status,
+    date: (o.created_at || '').split('T')[0],
+  };
+}
 
 export default function SellerDashboard() {
   const { user } = useContext(AuthContext) || {};
+  const { showToast } = useToast();
 
   // Tab State: 'products' | 'orders' | 'settings'
   const [activeTab, setActiveTab] = useState('products');
@@ -15,47 +58,11 @@ export default function SellerDashboard() {
     logoFile: null,
   });
 
-  // Dummy Data Produk Toko
-  const [products, setProducts] = useState([
-    {
-      id: 'prod-1',
-      name: 'WARMART Heavyweight Graphic Tee',
-      price: 189000,
-      stock: 45,
-      category: 'tshirt',
-      description: 'Kaos bahan cotton 16s tebal.',
-      image: 'https://images.unsplash.com/photo-1521572267360-ee0c2909d518?w=500&q=80',
-    },
-    {
-      id: 'prod-2',
-      name: 'Cyberpunk Black Pullover Hoodie',
-      price: 349000,
-      stock: 12,
-      category: 'hoodie',
-      description: 'Hoodie bahan fleece tebal premium.',
-      image: 'https://images.unsplash.com/photo-1556905055-8f358a7a47b2?w=500&q=80',
-    },
-  ]);
-
-  // Dummy Data Pesanan Masuk
-  const [orders, setOrders] = useState([
-    {
-      id: 'ORD-9901',
-      customer: 'Budi Santoso',
-      items: 'WARMART Heavyweight Graphic Tee (Size L)',
-      total: 189000,
-      status: 'Perlu Dikirim',
-      date: '2026-02-18',
-    },
-    {
-      id: 'ORD-9882',
-      customer: 'Siti Rahma',
-      items: 'Cyberpunk Black Pullover Hoodie (Size M)',
-      total: 349000,
-      status: 'Selesai',
-      date: '2026-02-15',
-    },
-  ]);
+  // Data Produk & Pesanan dari API Backend
+  const [products, setProducts] = useState([]);
+  const [orders, setOrders] = useState([]);
+  const [loadingProducts, setLoadingProducts] = useState(true);
+  const [loadingOrders, setLoadingOrders] = useState(true);
 
   // Modal State Tambah / Edit Produk
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -69,6 +76,60 @@ export default function SellerDashboard() {
     image: '',
     imageFile: null,
   });
+
+  // ============================================
+  // AMBIL DATA DARI API SAAT KOMPONEN DIMUAT
+  // ============================================
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadData = async () => {
+      try {
+        const storeRes = await storeService.getMyStore();
+        if (!cancelled && storeRes?.data?.store) {
+          const s = storeRes.data.store;
+          setStoreInfo((prev) => ({
+            ...prev,
+            name: s.store_name || prev.name,
+            description: s.address || prev.description,
+          }));
+        }
+      } catch {
+        // Abaikan jika belum punya toko
+      }
+
+      try {
+        const res = await productService.getMyProducts();
+        if (!cancelled) {
+          const list = res?.data?.data || [];
+          setProducts(list.map(normalizeProduct));
+        }
+      } catch {
+        if (!cancelled) showToast('Gagal memuat produk.', 'error');
+      } finally {
+        if (!cancelled) setLoadingProducts(false);
+      }
+
+      try {
+        const res = await orderService.getStoreOrders();
+        if (!cancelled) {
+          const list = res?.data?.data || [];
+          setOrders(list.map(normalizeOrder));
+        }
+      } catch {
+        // Abaikan jika belum punya toko
+      } finally {
+        if (!cancelled) setLoadingOrders(false);
+      }
+    };
+
+    loadData();
+
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Hitung Total Penjualan secara Dinamis
   const totalSales = orders.reduce((sum, order) => sum + order.total, 0);
@@ -129,51 +190,76 @@ export default function SellerDashboard() {
     setIsModalOpen(true);
   };
 
-  // Simpan Produk (Tambah / Edit)
-  const handleSaveProduct = (e) => {
+  // Simpan Produk (Tambah / Edit) — Kirim ke API Backend
+  const handleSaveProduct = async (e) => {
     e.preventDefault();
-    const defaultPlaceholder =
-      'https://images.unsplash.com/photo-1521572267360-ee0c2909d518?w=500&q=80';
 
-    if (editingProduct) {
-      setProducts((prev) =>
-        prev.map((p) =>
-          p.id === editingProduct.id
-            ? {
-                ...p,
-                ...formData,
-                price: Number(formData.price),
-                stock: Number(formData.stock),
-                image: formData.image || p.image,
-              }
-            : p
-        )
-      );
-    } else {
-      const newProduct = {
-        id: `prod-${Date.now()}`,
-        ...formData,
-        price: Number(formData.price),
-        stock: Number(formData.stock),
-        image: formData.image || defaultPlaceholder,
-      };
-      setProducts((prev) => [newProduct, ...prev]);
+    const hasFile = Boolean(formData.imageFile);
+    const payload = new FormData();
+    payload.append('name', formData.name);
+    payload.append('price', String(formData.price));
+    payload.append('stock', String(formData.stock));
+    payload.append('category', formData.category);
+    payload.append('description', formData.description || '');
+    if (hasFile) {
+      payload.append('image', formData.imageFile);
     }
-    setIsModalOpen(false);
+
+    try {
+      let saved;
+      if (editingProduct) {
+        const res = await productService.update(editingProduct.id, payload);
+        saved = res?.data?.data || res?.data;
+        setProducts((prev) =>
+          prev.map((p) => (p.id === editingProduct.id ? { ...p, ...normalizeProduct(saved) } : p))
+        );
+        showToast('Produk berhasil diperbarui!', 'success');
+      } else {
+        const res = await productService.create(payload);
+        saved = res?.data?.data || res?.data;
+        setProducts((prev) => [normalizeProduct(saved), ...prev]);
+        showToast('Produk berhasil ditambahkan!', 'success');
+      }
+      setIsModalOpen(false);
+    } catch (err) {
+      const msg =
+        err?.response?.data?.name?.[0] ||
+        err?.response?.data?.price?.[0] ||
+        err?.response?.data?.stock?.[0] ||
+        err?.response?.data?.error ||
+        'Gagal menyimpan produk.';
+      showToast(msg, 'error');
+    }
   };
 
-  // Hapus Produk
-  const handleDeleteProduct = (id) => {
-    if (window.confirm('Yakin ingin menghapus produk ini?')) {
+  // Hapus Produk — Hapus dari API Backend
+  const handleDeleteProduct = async (id) => {
+    if (!window.confirm('Yakin ingin menghapus produk ini?')) return;
+    try {
+      await productService.delete(id);
       setProducts((prev) => prev.filter((p) => p.id !== id));
+      showToast('Produk berhasil dihapus.', 'success');
+    } catch {
+      showToast('Gagal menghapus produk.', 'error');
     }
   };
 
-  // Ubah Status Pesanan
-  const handleUpdateOrderStatus = (orderId, newStatus) => {
-    setOrders((prev) =>
-      prev.map((o) => (o.id === orderId ? { ...o, status: newStatus } : o))
-    );
+  // Ubah Status Pesanan — Kirim ke API Backend
+  const handleUpdateOrderStatus = async (orderId, newStatus) => {
+    try {
+      const res = await orderService.updateShipping(orderId, {
+        shipping_status: newStatus,
+      });
+      const updated = res?.data?.data;
+      if (updated) {
+        setOrders((prev) =>
+          prev.map((o) => (o.id === orderId ? { ...o, ...normalizeOrder(updated) } : o))
+        );
+      }
+      showToast('Status pesanan diperbarui.', 'success');
+    } catch {
+      showToast('Gagal memperbarui status pesanan.', 'error');
+    }
   };
 
   return (
@@ -267,7 +353,11 @@ export default function SellerDashboard() {
       {/* TAB 1: KELOLA PRODUK */}
       {activeTab === 'products' && (
         <div className="space-y-4">
-          {products.length === 0 ? (
+          {loadingProducts ? (
+            <div className="bg-white border-4 border-black p-8 text-center shadow-brutal">
+              <p className="font-black text-sm uppercase text-gray-400">Memuat produk...</p>
+            </div>
+          ) : products.length === 0 ? (
             <div className="bg-white border-4 border-black p-8 text-center shadow-brutal">
               <p className="font-black text-sm uppercase">Belum ada produk yang ditambahkan.</p>
               <button
@@ -329,7 +419,9 @@ export default function SellerDashboard() {
       {activeTab === 'orders' && (
         <div className="bg-white border-4 border-black p-6 shadow-brutal space-y-4">
           <h2 className="text-xl font-black uppercase border-b-2 border-black pb-2">Daftar Transaksi</h2>
-          {orders.length === 0 ? (
+          {loadingOrders ? (
+            <p className="font-black text-xs uppercase text-gray-400 py-4">Memuat pesanan...</p>
+          ) : orders.length === 0 ? (
             <p className="font-black text-xs uppercase text-gray-500 py-4">Belum ada pesanan masuk.</p>
           ) : (
             <div className="overflow-x-auto">
@@ -368,7 +460,7 @@ export default function SellerDashboard() {
                         {ord.status === 'Perlu Dikirim' && (
                           <button
                             type="button"
-                            onClick={() => handleUpdateOrderStatus(ord.id, 'Dikirim')}
+                            onClick={() => handleUpdateOrderStatus(ord.id, 'shipped')}
                             className="bg-black text-white px-3 py-1 font-black text-[10px] uppercase border border-black shadow-brutal hover:bg-yellow-300 hover:text-black cursor-pointer"
                           >
                             Tandai Dikirim
@@ -377,7 +469,7 @@ export default function SellerDashboard() {
                         {ord.status === 'Dikirim' && (
                           <button
                             type="button"
-                            onClick={() => handleUpdateOrderStatus(ord.id, 'Selesai')}
+                            onClick={() => handleUpdateOrderStatus(ord.id, 'delivered')}
                             className="bg-green-500 text-white px-3 py-1 font-black text-[10px] uppercase border border-black shadow-brutal hover:bg-black cursor-pointer"
                           >
                             Selesaikan

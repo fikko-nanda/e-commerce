@@ -21,6 +21,22 @@ const orderService = {
 
   /** POST /orders/<id>/success/ — ubah status order ke PAID setelah bayar di Snap */
   markSuccess: (id) => API.post(`/orders/${id}/success/`),
+
+  /** Checkout semua item dalam keranjang (loop per item, 1 order per produk) */
+  checkoutCart: async (items, paymentMethod = 'cod') => {
+    const results = [];
+    for (const item of items) {
+      const payload = {
+        product_id: item.id,
+        quantity: item.quantity,
+        payment_method: paymentMethod,
+        shipping_address: 'Alamat Pengiriman Default',
+      };
+      const res = await API.post('/orders/checkout/', payload);
+      results.push(res.data);
+    }
+    return results;
+  },
 };
 
 export default orderService;
