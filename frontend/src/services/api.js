@@ -89,12 +89,11 @@ API.interceptors.response.use(
       return API(originalRequest);
     } catch (err) {
       processQueue(err, null);
-      // Refresh gagal — hapus storage & logout
-      localStorage.removeItem('access_token');
-      localStorage.removeItem('token');
-      localStorage.removeItem('refresh_token');
-      localStorage.removeItem('warmart_user');
-      window.location.href = '/';
+      
+      // ❌ REDIRECT DIKOMENTARI SUPAYA TIDAK MEMANTUL KE HOME SAAT TESTING/DEV:
+      // window.location.href = '/';
+      
+      console.warn('Akses ditolak / Refresh token expired (Mode Dev: Redirect diabaikan)');
       return Promise.reject(err);
     } finally {
       isRefreshing = false;

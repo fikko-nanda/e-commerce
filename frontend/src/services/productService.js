@@ -1,38 +1,17 @@
 import API from './api';
 
 const productService = {
-  /** GET /products/ — daftar semua produk aktif. Support ?category=<kat> */
-  getAll: (category) => {
-    let url = '/products/';
-    if (category && category !== 'all') {
-      url += `?category=${category}`;
-    }
-    return API.get(url);
-  },
-
-  /** GET /products/?mine=true — daftar produk milik toko saya */
-  getMyProducts: () => API.get('/products/?mine=true'),
-
-  /** GET /products/<id>/ — detail satu produk */
-  getDetail: (id) => API.get(`/products/${id}/`),
-
-  /** POST /products/ — tambah produk baru (JSON atau FormData untuk gambar) */
-  create: (data) => {
-    const isFormData = data instanceof FormData;
-    return API.post('/products/', data, isFormData ? {
+  getAll: (params) => API.get('/products/', { params }),
+  getById: (id) => API.get(`/products/${id}/`),
+  getMyProducts: () => API.get('/products/my-products/'),
+  create: (formData) =>
+    API.post('/products/', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
-    } : {});
-  },
-
-  /** PUT /products/<id>/ — update produk (JSON atau FormData) */
-  update: (id, data) => {
-    const isFormData = data instanceof FormData;
-    return API.put(`/products/${id}/`, data, isFormData ? {
+    }),
+  update: (id, formData) =>
+    API.put(`/products/${id}/`, formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
-    } : {});
-  },
-
-  /** DELETE /products/<id>/ — hapus produk */
+    }),
   delete: (id) => API.delete(`/products/${id}/`),
 };
 

@@ -29,7 +29,6 @@ export default function Navbar() {
         </Link>
 
         <div className="flex items-center gap-3 md:gap-4">
-          {/* Mode Admin — hanya muncul untuk role admin */}
           {user?.role === 'admin' && (
             <Link
               to="/admin"
@@ -46,7 +45,6 @@ export default function Navbar() {
             🏬 Mode Penjual
           </Link>
 
-          {/* Tombol Keranjang */}
           <button 
             type="button"
             onClick={() => setIsCartOpen(true)} 
@@ -61,7 +59,6 @@ export default function Navbar() {
           </button>
 
           {user ? (
-            /* Menu Profile User dengan Dropdown */
             <div className="relative">
               <button 
                 type="button"
@@ -71,10 +68,9 @@ export default function Navbar() {
                 👤 {user.first_name || user.username || user.email?.split('@')[0]}
               </button>
 
-              {/* Popup Dropdown Profile */}
               {isProfileOpen && (
                 <div 
-                  className="absolute right-0 mt-2 w-52 bg-white border-4 border-black shadow-brutal-lg z-50"
+                  className="absolute right-0 mt-2 w-56 bg-white border-4 border-black shadow-brutal-lg z-50"
                   onClick={() => setIsProfileOpen(false)}
                 >
                   <div className="p-3 border-b-2 border-black bg-yellow-100">
@@ -83,10 +79,10 @@ export default function Navbar() {
                   </div>
 
                   <Link 
-                    to="/profile" 
+                    to="/user/orders" 
                     className="block px-4 py-2.5 text-xs font-black uppercase hover:bg-yellow-300 border-b-2 border-black transition"
                   >
-                    ⚙️ Pengaturan Profil
+                    📦 Pesanan Saya & Lacak
                   </Link>
 
                   <Link 
@@ -94,6 +90,13 @@ export default function Navbar() {
                     className="block px-4 py-2.5 text-xs font-black uppercase hover:bg-yellow-300 border-b-2 border-black transition"
                   >
                     📊 Dashboard Saya
+                  </Link>
+
+                  <Link 
+                    to="/profile" 
+                    className="block px-4 py-2.5 text-xs font-black uppercase hover:bg-yellow-300 border-b-2 border-black transition"
+                  >
+                    ⚙️ Pengaturan Profil
                   </Link>
 
                   <button 
@@ -118,7 +121,6 @@ export default function Navbar() {
         </div>
       </nav>
 
-      {/* Render Drawer & Modal */}
       <LoginModal isOpen={isLoginOpen} onClose={() => setIsLoginOpen(false)} />
       <CartDrawer isOpen={isCartOpen} onClose={() => setIsCartOpen(false)} />
     </>

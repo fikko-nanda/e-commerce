@@ -1,23 +1,27 @@
-export default function AdminStats({ totalStores, activeStores, totalUsers, totalReviews, avgRating }) {
+export default function AdminStats({
+  totalStores,
+  activeStores,
+  totalUsers,
+  totalReviews,
+  avgRating,
+}) {
   return (
-    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
       <div className="bg-yellow-300 border-4 border-black p-4 shadow-brutal">
-        <span className="text-[10px] font-black uppercase">Total Toko</span>
-        <h3 className="text-2xl font-black mt-1">{totalStores}</h3>
-        <span className="text-[10px] font-bold text-gray-700">{activeStores} aktif</span>
+        <span className="block text-xs font-black uppercase">Toko Aktif / Total</span>
+        <span className="text-2xl font-black">{activeStores} / {totalStores}</span>
       </div>
-      <div className="bg-blue-400 border-4 border-black p-4 shadow-brutal">
-        <span className="text-[10px] font-black uppercase">Total User</span>
-        <h3 className="text-2xl font-black mt-1">{totalUsers}</h3>
+      <div className="bg-purple-400 text-black border-4 border-black p-4 shadow-brutal">
+        <span className="block text-xs font-black uppercase">Total Pengguna</span>
+        <span className="text-2xl font-black">{totalUsers}</span>
       </div>
-      <div className="bg-green-400 border-4 border-black p-4 shadow-brutal">
-        <span className="text-[10px] font-black uppercase">GMV Platform</span>
-        <h3 className="text-2xl font-black mt-1">Rp 128jt</h3>
+      <div className="bg-blue-300 text-black border-4 border-black p-4 shadow-brutal">
+        <span className="block text-xs font-black uppercase">Total Ulasan</span>
+        <span className="text-2xl font-black">{totalReviews}</span>
       </div>
-      <div className="bg-purple-400 border-4 border-black p-4 shadow-brutal">
-        <span className="text-[10px] font-black uppercase">Total Ulasan</span>
-        <h3 className="text-2xl font-black mt-1">{totalReviews}</h3>
-        <span className="text-[10px] font-bold text-gray-700">avg {avgRating}★</span>
+      <div className="bg-green-400 text-black border-4 border-black p-4 shadow-brutal">
+        <span className="block text-xs font-black uppercase">Rata-Rata Rating</span>
+        <span className="text-2xl font-black">★ {avgRating}</span>
       </div>
     </div>
   );

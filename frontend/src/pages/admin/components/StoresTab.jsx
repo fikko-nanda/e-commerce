@@ -9,90 +9,73 @@ export default function StoresTab({
   formatDate,
 }) {
   return (
-    <>
-      <div className="flex flex-wrap gap-2 mb-6 items-center">
-        <span className="text-[10px] font-black uppercase text-gray-500">Filter:</span>
-        {['all', 'active', 'pending_review', 'suspended', 'rejected'].map((s) => (
-          <button
-            key={s}
-            onClick={() => setFilter(s)}
-            className={`text-[10px] font-black uppercase px-3 py-1.5 border-2 border-black shadow-brutal transition ${
-              filter === s ? 'bg-black text-white' : 'bg-white hover:bg-yellow-300'
-            }`}
-          >
-            {s === 'all' ? 'Semua' : statusLabels[s]?.label || s}
-          </button>
-        ))}
+    <div className="bg-white border-4 border-black p-6 shadow-brutal mt-4">
+      <div className="flex justify-between items-center mb-4">
+        <h2 className="text-xl font-black uppercase">Manajemen Toko</h2>
+        <select
+          value={filter}
+          onChange={(e) => setFilter(e.target.value)}
+          className="bg-white border-2 border-black p-2 text-xs font-bold focus:outline-none"
+        >
+          <option value="all">Semua Status</option>
+          <option value="active">Aktif</option>
+          <option value="pending_review">Menunggu Verifikasi</option>
+          <option value="rejected">Ditolak</option>
+          <option value="suspended">Suspended</option>
+        </select>
       </div>
 
-      <h2 className="text-2xl font-black uppercase border-b-4 border-black pb-3 mb-6">
-        Daftar Toko / Seller ({stores.length})
-      </h2>
-
       {loading ? (
-        <div className="text-center py-20 font-black uppercase text-gray-400">Memuat Daftar Toko...</div>
-      ) : stores.length === 0 ? (
-        <div className="bg-gray-50 border-4 border-black p-12 text-center font-black text-gray-400 uppercase">
-          Tidak ada toko untuk filter ini.
-        </div>
+        <div className="p-4 font-black text-xs uppercase">Memuat data toko...</div>
       ) : (
-        <div className="space-y-4">
-          {stores.map((store) => {
-            const badge = statusLabels[store.status] || { label: store.status, color: 'bg-gray-200' };
-            return (
-              <div
-                key={store.id}
-                className="bg-white border-4 border-black p-5 shadow-brutal flex flex-col md:flex-row justify-between items-start md:items-center gap-4"
-              >
-                <div>
-                  <div className="flex items-center gap-2 mb-1 flex-wrap">
-                    <h4 className="font-black text-base uppercase">{store.store_name}</h4>
-                    <span className={`text-[10px] font-black px-2 py-0.5 border border-black ${badge.color}`}>
-                      {badge.label}
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-xs font-bold border-collapse border-2 border-black">
+            <thead>
+              <tr className="bg-yellow-300 text-black border-b-2 border-black uppercase">
+                <th className="p-3 border-r-2 border-black">Nama Toko</th>
+                <th className="p-3 border-r-2 border-black">Pemilik</th>
+                <th className="p-3 border-r-2 border-black">Status</th>
+                <th className="p-3 border-r-2 border-black">Tanggal</th>
+                <th className="p-3">Aksi</th>
+              </tr>
+            </thead>
+            <tbody>
+              {stores.map((s) => (
+                <tr key={s.id} className="border-b border-black hover:bg-gray-50">
+                  <td className="p-3 border-r-2 border-black font-black">{s.store_name}</td>
+                  <td className="p-3 border-r-2 border-black">{s.owner_email}</td>
+                  <td className="p-3 border-r-2 border-black">
+                    <span className={`px-2 py-0.5 border border-black text-[10px] font-black uppercase ${statusLabels[s.status]?.color || 'bg-gray-200'}`}>
+                      {statusLabels[s.status]?.label || s.status}
                     </span>
-                  </div>
-                  <p className="text-xs font-bold text-gray-600">
-                    👤 {store.owner_username || store.owner_email} | 📞 {store.phone}
-                  </p>
-                  <p className="text-[10px] font-bold text-gray-500 mt-1">
-                    📅 {formatDate(store.created_at)} | 📍 {store.address}
-                  </p>
-                </div>
-
-                <div className="flex flex-wrap gap-2 shrink-0">
-                  {store.status !== 'active' && (
-                    <button
-                      onClick={() => onStatusChange(store, 'active')}
-                      disabled={actionId === store.id}
-                      className="bg-green-400 font-black text-[10px] px-3 py-2 uppercase border-2 border-black shadow-brutal hover:bg-black hover:text-white transition disabled:opacity-50"
-                    >
-                      ✅ Aktifkan
-                    </button>
-                  )}
-                  {store.status !== 'suspended' && (
-                    <button
-                      onClick={() => onStatusChange(store, 'suspended')}
-                      disabled={actionId === store.id}
-                      className="bg-gray-700 text-white font-black text-[10px] px-3 py-2 uppercase border-2 border-black shadow-brutal hover:bg-black transition disabled:opacity-50"
-                    >
-                      ⛔ Suspend
-                    </button>
-                  )}
-                  {store.status !== 'rejected' && (
-                    <button
-                      onClick={() => onStatusChange(store, 'rejected')}
-                      disabled={actionId === store.id}
-                      className="bg-red-400 text-white font-black text-[10px] px-3 py-2 uppercase border-2 border-black shadow-brutal hover:bg-black transition disabled:opacity-50"
-                    >
-                      🚫 Tolak
-                    </button>
-                  )}
-                </div>
-              </div>
-            );
-          })}
+                  </td>
+                  <td className="p-3 border-r-2 border-black">{formatDate(s.created_at)}</td>
+                  <td className="p-3 flex gap-1">
+                    {s.status !== 'active' && (
+                      <button
+                        disabled={actionId === s.id}
+                        onClick={() => onStatusChange(s, 'active')}
+                        className="bg-green-400 text-black px-2 py-1 border border-black text-[10px] font-black uppercase hover:bg-black hover:text-white transition"
+                      >
+                        Aktifkan
+                      </button>
+                    )}
+                    {s.status !== 'suspended' && (
+                      <button
+                        disabled={actionId === s.id}
+                        onClick={() => onStatusChange(s, 'suspended')}
+                        className="bg-red-500 text-white px-2 py-1 border border-black text-[10px] font-black uppercase hover:bg-black transition"
+                      >
+                        Suspend
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
-    </>
+    </div>
   );
 }

@@ -21,6 +21,7 @@ import RegisterSeller from './pages/seller/RegisterSeller';
 
 import UserDashboard from './pages/user/UserDashboard';
 import UserProfile from './pages/user/UserProfile';
+import OrderHistory from './pages/user/OrderHistory';
 
 import AdminDashboard from './pages/admin/AdminDashboard';
 
@@ -28,10 +29,7 @@ function AppContent() {
   const { user } = useContext(AuthContext) || {};
 
   const isLoggedIn = Boolean(
-    user &&
-      (user.id ||
-        user.email ||
-        Object.keys(user).length > 0)
+    user && (user.id || user.email || Object.keys(user).length > 0)
   );
 
   return (
@@ -41,52 +39,37 @@ function AppContent() {
 
         <main className="flex-grow">
           <Routes>
-            {/* =========================
-                PUBLIC ROUTES
-            ========================= */}
+            {/* PUBLIC ROUTES */}
             <Route path="/" element={<Home />} />
+            <Route path="/product/:id" element={<ProductDetail />} />
+            <Route path="/store/:storeName" element={<StoreProfile />} />
 
+            {/* USER ROUTES */}
+            <Route path="/profile" element={<UserProfile />} />
+            <Route path="/user/dashboard" element={<UserDashboard />} />
             <Route
-              path="/product/:id"
-              element={<ProductDetail />}
+              path="/user/orders"
+              element={
+                <ProtectedRoute>
+                  <OrderHistory />
+                </ProtectedRoute>
+              }
             />
 
+            {/* SELLER ROUTES */}
+            <Route path="/seller/register" element={<RegisterSeller />} />
             <Route
-              path="/store/:storeName"
-              element={<StoreProfile />}
+              path="/seller/*"
+              element={
+                <ProtectedRoute allowedRoles={['seller', 'admin']}>
+                  <SellerDashboard />
+                </ProtectedRoute>
+              }
             />
 
-            {/* =========================
-                USER ROUTES
-            ========================= */}
+            {/* ADMIN ROUTES */}
             <Route
-              path="/profile"
-              element={<UserProfile />}
-            />
-
-            <Route
-              path="/user/dashboard"
-              element={<UserDashboard />}
-            />
-
-            {/* =========================
-                SELLER ROUTES
-            ========================= */}
-            <Route
-              path="/seller/register"
-              element={<RegisterSeller />}
-            />
-
-            <Route
-              path="/seller"
-              element={<SellerDashboard />}
-            />
-
-            {/* =========================
-                ADMIN ROUTES
-            ========================= */}
-            <Route
-              path="/admin"
+              path="/admin/*"
               element={
                 <ProtectedRoute requiredRole="admin">
                   <AdminDashboard />
@@ -94,19 +77,13 @@ function AppContent() {
               }
             />
 
-            {/* =========================
-                404
-            ========================= */}
-            <Route
-              path="*"
-              element={<NotFound />}
-            />
+            {/* 404 NOT FOUND */}
+            <Route path="*" element={<NotFound />} />
           </Routes>
         </main>
 
         <Footer />
 
-        {/* ChatDrawer hanya aktif jika user login */}
         {isLoggedIn && <ChatDrawer />}
       </div>
     </Router>
