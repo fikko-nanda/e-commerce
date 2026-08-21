@@ -22,6 +22,8 @@ import RegisterSeller from './pages/seller/RegisterSeller';
 import UserDashboard from './pages/user/UserDashboard';
 import UserProfile from './pages/user/UserProfile';
 
+import AdminDashboard from './pages/admin/AdminDashboard';
+
 function AppContent() {
   const { user } = useContext(AuthContext) || {};
 
@@ -78,6 +80,18 @@ function AppContent() {
             <Route
               path="/seller"
               element={<SellerDashboard />}
+            />
+
+            {/* =========================
+                ADMIN ROUTES
+            ========================= */}
+            <Route
+              path="/admin"
+              element={
+                <ProtectedRoute requiredRole="admin">
+                  <AdminDashboard />
+                </ProtectedRoute>
+              }
             />
 
             {/* =========================
