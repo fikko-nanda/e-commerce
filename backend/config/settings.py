@@ -85,7 +85,7 @@ MIDDLEWARE = [
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
-CORS_ALLOW_ALL_ORIGINS = True
+CORS_ALLOW_ALL_ORIGINS = False
 ROOT_URLCONF = 'config.urls'
 
 TEMPLATES = [
@@ -131,7 +131,7 @@ MIDTRANS_CLIENT_KEY = os.getenv('MIDTRANS_CLIENT_KEY')
 if not (MIDTRANS_SERVER_KEY and MIDTRANS_CLIENT_KEY) and DEBUG:
     import warnings
     warnings.warn("Midtrans keys tidak diset! Payment akan gagal")
-MIDTRANS_IS_PRODUCTION = False
+MIDTRANS_IS_PRODUCTION = os.getenv('MIDTRANS_IS_PRODUCTION', 'False').lower() == 'true'
 
 # Google OAuth 2.0 (Google Identity Services)
 GOOGLE_CLIENT_ID = os.getenv('GOOGLE_CLIENT_ID')

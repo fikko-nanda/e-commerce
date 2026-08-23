@@ -11,15 +11,20 @@ import os
 from django.core.asgi import get_asgi_application
 from channels.routing import ProtocolTypeRouter, URLRouter
 from channels.auth import AuthMiddlewareStack
+from chats.middleware import JWTAuthMiddleware
 import chats.routing
 
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'config.settings')
 
 application = ProtocolTypeRouter({
     "http": get_asgi_application(),
-    "websocket": AuthMiddlewareStack(
-        URLRouter(
-            chats.routing.websocket_urlpatterns
+    # JWTAuthMiddleware (token di query string) di lapisan luar,
+    # AuthMiddlewareStack (session cookie) sebagai fallback.
+    "websocket": JWTAuthMiddleware(
+        AuthMiddlewareStack(
+            URLRouter(
+                chats.routing.websocket_urlpatterns
+            )
         )
     ),
 })

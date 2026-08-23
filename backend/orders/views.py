@@ -1,5 +1,6 @@
 import time
 import hashlib
+import logging
 import midtransclient
 from django.conf import settings
 from rest_framework.views import APIView
@@ -9,6 +10,8 @@ from django.shortcuts import get_object_or_404
 from products.models import Product
 from .models import Order
 from .serializers import OrderCreateSerializer, OrderDetailSerializer
+
+logger = logging.getLogger(__name__)
 
 
 class CheckoutView(APIView):
@@ -84,6 +87,8 @@ class CheckoutView(APIView):
                 transaction = snap.create_transaction(param)
                 snap_token = transaction['token']
                 redirect_url = transaction['redirect_url']
+                order.midtrans_order_id = midtrans_order_id
+                order.save(update_fields=['midtrans_order_id'])
             except Exception as e:
                 order.delete()
                 product.stock += data['quantity']
@@ -159,9 +164,10 @@ class MyOrdersView(APIView):
 
                 for order in orders:
                     if order.payment_status == Order.PaymentStatus.PENDING and order.payment_method == Order.PaymentMethod.MIDTRANS:
+                        if not order.midtrans_order_id:
+                            continue
                         try:
-                            # 1. Coba pencarian status dengan UUID murni
-                            status_resp = snap.transactions.notification(str(order.id))
+                            status_resp = snap.transactions.notification(order.midtrans_order_id)
                             trx_status = status_resp.get('transaction_status')
                             fraud_status = status_resp.get('fraud_status')
 
@@ -174,7 +180,7 @@ class MyOrdersView(APIView):
                         except Exception:
                             pass
             except Exception as e:
-                print(f"Error Midtrans Sync: {str(e)}")
+                logger.error("Midtrans Sync Error: %s", str(e))
 
         serializer = OrderDetailSerializer(orders, many=True, context={'request': request})
         return Response({'data': serializer.data}, status=status.HTTP_200_OK)
@@ -281,11 +287,19 @@ class OrderPayView(APIView):
 
 
 class OrderPaySuccessView(APIView):
-    """POST /orders/<id>/success/ — Dipanggil frontend ketika pembayaran Snap sukses"""
+    """POST /orders/<id>/success/ — Konfirmasi pembayaran COD (Midtrans dikonfirmasi via webhook)."""
     permission_classes = [permissions.IsAuthenticated]
 
     def post(self, request, pk):
         order = get_object_or_404(Order, pk=pk, buyer=request.user)
+
+        # Hanya COD yang bisa dikonfirmasi manual oleh buyer
+        if order.payment_method != Order.PaymentMethod.COD:
+            return Response(
+                {'error': 'Pembayaran Midtrans dikonfirmasi otomatis oleh sistem.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
         if order.payment_status == Order.PaymentStatus.PENDING:
             order.payment_status = Order.PaymentStatus.PAID
             order.save()

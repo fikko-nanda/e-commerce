@@ -1,12 +1,14 @@
 from django.urls import path
 from .views import (
     RegisterSellerView, MyStoreView,
-    AdminStoreListView, AdminStoreStatusView
+    AdminStoreListView, AdminStoreStatusView,
+    StoreUserByStoreNameView
 )
 
 urlpatterns = [
     path('register/', RegisterSellerView.as_view(), name='seller_register'),
     path('me/', MyStoreView.as_view(), name='my_store'),
+    path('user-by-name/', StoreUserByStoreNameView.as_view(), name='store_user_by_name'),
 
     # Admin: Manajemen Toko / Seller
     path('admin/', AdminStoreListView.as_view(), name='admin_store_list'),
