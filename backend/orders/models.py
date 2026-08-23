@@ -31,6 +31,7 @@ class Order(models.Model):
     
     payment_method = models.CharField(max_length=20, choices=PaymentMethod.choices)
     payment_status = models.CharField(max_length=20, choices=PaymentStatus.choices, default=PaymentStatus.PENDING)
+    midtrans_order_id = models.CharField(max_length=100, blank=True, null=True, db_index=True)
     
     shipping_status = models.CharField(max_length=20, choices=ShippingStatus.choices, default=ShippingStatus.PENDING)
     courier_name = models.CharField(max_length=50, blank=True, null=True)

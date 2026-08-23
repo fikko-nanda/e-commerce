@@ -5,6 +5,7 @@ import { CartContext } from '../../context/CartContext';
 import { AuthContext } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
 import CheckoutModal from '../../components/CheckoutModal';
+import LoginModal from '../../components/LoginModal';
 
 export default function ProductDetail() {
   const { id } = useParams();
@@ -19,6 +20,7 @@ export default function ProductDetail() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
+  const [isLoginOpen, setIsLoginOpen] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -81,7 +83,7 @@ export default function ProductDetail() {
   const handleAddToCart = () => {
     if (!user) {
       showToast('Silakan login terlebih dahulu untuk menambah ke keranjang!', 'error');
-      navigate('/login', { state: { from: `/product/${id}` } });
+      setIsLoginOpen(true);
       return;
     }
 
@@ -92,7 +94,7 @@ export default function ProductDetail() {
   const handleBuyNow = () => {
     if (!user) {
       showToast('Silakan login terlebih dahulu untuk membeli!', 'error');
-      navigate('/login', { state: { from: `/product/${id}` } });
+      setIsLoginOpen(true);
       return;
     }
 
@@ -102,7 +104,7 @@ export default function ProductDetail() {
   const handleChatSeller = () => {
     if (!user) {
       showToast('Silakan login terlebih dahulu untuk chat dengan penjual!', 'error');
-      navigate('/login', { state: { from: `/product/${id}` } });
+      setIsLoginOpen(true);
       return;
     }
 
@@ -243,6 +245,8 @@ export default function ProductDetail() {
         onClose={() => setIsCheckoutOpen(false)}
         onSuccess={() => navigate('/user/dashboard')}
       />
+
+      <LoginModal isOpen={isLoginOpen} onClose={() => setIsLoginOpen(false)} />
     </div>
   );
 }

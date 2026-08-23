@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { storeService } from '../../services';
 
 export default function RegisterSeller() {
   const navigate = useNavigate();
@@ -65,15 +66,22 @@ export default function RegisterSeller() {
   const handleNext = () => setStep((prev) => Math.min(prev + 1, 5));
   const handlePrev = () => setStep((prev) => Math.max(prev - 1, 1));
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     setIsSubmitting(true);
 
-    // Simulasi Pengiriman Data & Verifikasi Admin
-    setTimeout(() => {
+    try {
+      await storeService.register({
+        store_name: formData.storeName,
+        phone: formData.phone,
+        address: formData.storeAddress,
+      });
       setIsSubmitting(false);
       setIsSubmitted(true);
-    }, 1500);
+    } catch (err) {
+      alert(err.response?.data?.error || err.response?.data?.store_name?.[0] || 'Gagal mendaftarkan toko. Silakan coba lagi.');
+      setIsSubmitting(false);
+    }
   };
 
   if (isSubmitted) {

@@ -1,7 +1,6 @@
 from django.urls import path
-from .views import GoogleAuthView, RegisterSellerView
+from .views import HealthCheckView
 
 urlpatterns = [
-    path('auth/google/', GoogleAuthView.as_view(), name='google_auth'),
-    path('auth/seller/register/', RegisterSellerView.as_view(), name='seller_register'),
+    path('health/', HealthCheckView.as_view(), name='health_check'),
 ]

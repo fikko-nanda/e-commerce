@@ -21,7 +21,7 @@ import RegisterSeller from './pages/seller/RegisterSeller';
 
 import UserDashboard from './pages/user/UserDashboard';
 import UserProfile from './pages/user/UserProfile';
-
+import UserChat from './pages/user/UserChat';
 import AdminDashboard from './pages/admin/AdminDashboard';
 
 function AppContent() {
@@ -67,6 +67,11 @@ function AppContent() {
             <Route
               path="/user/dashboard"
               element={<UserDashboard />}
+            />
+
+            <Route
+              path="/user/chat"
+              element={<UserChat />}
             />
 
             {/* =========================

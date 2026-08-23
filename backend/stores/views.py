@@ -62,6 +62,26 @@ class MyStoreView(APIView):
         return Response({'store': StoreSerializer(store).data}, status=status.HTTP_200_OK)
 
 
+class StoreUserByStoreNameView(APIView):
+    """GET /stores/user-by-name/?store_name=<name> — dapatkan user UUID penjual dari nama toko."""
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        store_name = request.query_params.get('store_name')
+        if not store_name:
+            return Response({'error': 'store_name query param required'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        store = Store.objects.filter(store_name__iexact=store_name).first()
+        if not store:
+            return Response({'error': 'Toko tidak ditemukan'}, status=status.HTTP_404_NOT_FOUND)
+        
+        return Response({
+            'user_id': str(store.user.id),
+            'store_name': store.store_name,
+            'user_email': store.user.email,
+        }, status=status.HTTP_200_OK)
+
+
 # ============================================================
 # ADMIN: Manajemen Toko / Seller
 # ============================================================

@@ -1,17 +1,35 @@
 import { useState } from 'react';
-import { useChat } from '../context/ChatContext';
+import { useChat } from "../context/ChatContext";
 
 export default function ChatDrawer() {
   const { 
     isOpen, 
     setIsOpen, 
     activeSeller, 
-    setActiveSeller, 
-    conversations, 
+    setActiveSeller,
+    activeCustomer,
+    setActiveCustomer,
+    conversations,
+    customerChats,
+    openCustomerChat,
     sendMessage 
   } = useChat();
 
   const [input, setInput] = useState('');
+
+  const isSellerView = (() => {
+    if (localStorage.getItem('myStoreName')) return true;
+    try {
+      const saved = localStorage.getItem('warmart_user');
+      if (saved) {
+        const u = JSON.parse(saved);
+        return u.role === 'seller' || !!u.store_name || !!u.store;
+      }
+    } catch {
+      // Permitted empty catch
+    }
+    return false;
+  })();
 
   if (!isOpen) {
     return (
@@ -24,7 +42,7 @@ export default function ChatDrawer() {
     );
   }
 
-  const currentMessages = activeSeller ? conversations[activeSeller] || [] : [];
+  const isInCustomerThread = isSellerView && !!activeCustomer;
 
   const handleSend = (e) => {
     e.preventDefault();
@@ -33,26 +51,54 @@ export default function ChatDrawer() {
     setInput('');
   };
 
+  const handleBack = () => {
+    if (isInCustomerThread) setActiveCustomer(null);
+    else setActiveSeller(null);
+  };
+
+  const handleOpenCustomer = (custKey) => {
+    openCustomerChat(custKey);
+  };
+
+  // Tentukan pesan yang ditampilkan
+  let currentMessages = [];
+  let headerTitle = '💬 Pesan Masuk';
+  let placeholder = '';
+
+  if (isInCustomerThread) {
+    currentMessages = customerChats[activeCustomer] || [];
+    headerTitle = `👤 ${activeCustomer}`;
+    placeholder = `Balas ke ${activeCustomer}...`;
+  } else if (isSellerView && activeSeller) {
+    currentMessages = conversations[activeSeller] || [];
+    headerTitle = `🏪 ${activeSeller}`;
+    placeholder = `Balas di thread ${activeSeller}...`;
+  } else if (activeSeller) {
+    currentMessages = conversations[activeSeller] || [];
+    headerTitle = `🏪 ${activeSeller}`;
+    placeholder = `Tanya ${activeSeller}...`;
+  }
+
+  const canSend = isInCustomerThread || !!activeSeller;
+
   return (
     <div className="fixed bottom-6 right-6 z-50 w-80 sm:w-96 bg-white border-4 border-black shadow-brutal-lg flex flex-col h-[480px]">
-      {/* Header Drawer */}
       <div className="bg-black text-white p-3 border-b-4 border-black flex justify-between items-center">
-        {activeSeller ? (
+        {(activeSeller || activeCustomer) ? (
           <div className="flex items-center gap-2">
             <button 
-              onClick={() => setActiveSeller(null)}
+              onClick={handleBack}
               className="bg-yellow-300 text-black font-black text-[10px] px-1.5 py-0.5 border border-black hover:bg-white"
             >
               ←
             </button>
             <span className="font-black text-xs uppercase tracking-wider line-clamp-1">
-              🏪 {activeSeller}
+              {headerTitle}
             </span>
           </div>
         ) : (
           <span className="font-black text-xs uppercase tracking-wider">💬 Pesan Masuk</span>
         )}
-
         <button 
           onClick={() => setIsOpen(false)} 
           className="bg-red-500 text-white font-black px-2 py-0.5 border border-white text-xs hover:bg-white hover:text-black"
@@ -61,37 +107,87 @@ export default function ChatDrawer() {
         </button>
       </div>
 
-      {/* Tampilan 1: Daftar Seluruh Obrolan Toko */}
-      {!activeSeller ? (
+      {/* Tampilan List Pesan / Thread */}
+      {!activeSeller && !activeCustomer ? (
         <div className="flex-grow p-3 overflow-y-auto space-y-2 bg-gray-50">
-          <p className="text-[10px] font-black uppercase text-gray-500 mb-2">Pilih Toko Penjual:</p>
-          {Object.keys(conversations).map((sellerName) => {
-            const lastMsg = conversations[sellerName][conversations[sellerName].length - 1];
-            return (
-              <div
-                key={sellerName}
-                onClick={() => setActiveSeller(sellerName)}
-                className="bg-white border-2 border-black p-3 shadow-brutal hover:bg-yellow-300 cursor-pointer transition flex justify-between items-center"
-              >
-                <div>
-                  <h4 className="font-black text-xs uppercase">🏪 {sellerName}</h4>
-                  <p className="text-[11px] font-bold text-gray-600 line-clamp-1 mt-0.5">
-                    {lastMsg ? lastMsg.text : 'Belum ada pesan'}
-                  </p>
-                </div>
-                <span className="text-xs font-black">→</span>
+          {isSellerView ? (
+            <>
+              <p className="text-[10px] font-black uppercase text-gray-500 mb-2">Customer yang chat ke toko Anda:</p>
+              {Object.keys(customerChats).length === 0 ? (
+                <p className="text-center py-8 text-xs font-bold text-gray-400">Belum ada pesan dari customer</p>
+              ) : (
+                Object.keys(customerChats).map((custKey) => {
+                  const lastMsg = customerChats[custKey][customerChats[custKey].length - 1];
+                  return (
+                    <div
+                      key={custKey}
+                      onClick={() => handleOpenCustomer(custKey)}
+                      className="bg-white border-2 border-black p-3 shadow-brutal hover:bg-yellow-300 cursor-pointer transition flex justify-between items-center"
+                    >
+                      <div>
+                        <h4 className="font-black text-xs uppercase">👤 {custKey}</h4>
+                        <p className="text-[11px] font-bold text-gray-600 line-clamp-1 mt-0.5">
+                          {lastMsg ? lastMsg.text : 'Belum ada pesan'}
+                        </p>
+                      </div>
+                      <span className="text-xs font-black">→</span>
+                    </div>
+                  );
+                })
+              )}
+              <div className="border-t-2 border-black my-2 pt-2">
+                <p className="text-[10px] font-black uppercase text-gray-500 mb-2">Thread toko (lama):</p>
+                {Object.keys(conversations).map((sellerName) => {
+                  const lastMsg = conversations[sellerName][conversations[sellerName].length - 1];
+                  return (
+                    <div
+                      key={sellerName + (lastMsg?.id || '')}
+                      onClick={() => setActiveSeller(sellerName)}
+                      className="bg-white border-2 border-black p-3 shadow-brutal hover:bg-yellow-300 cursor-pointer transition flex justify-between items-center mb-2"
+                    >
+                      <div>
+                        <h4 className="font-black text-xs uppercase">🏪 {sellerName}</h4>
+                        <p className="text-[11px] font-bold text-gray-600 line-clamp-1 mt-0.5">
+                          {lastMsg ? lastMsg.text : 'Belum ada pesan'}
+                        </p>
+                      </div>
+                      <span className="text-xs font-black">→</span>
+                    </div>
+                  );
+                })}
               </div>
-            );
-          })}
+            </>
+          ) : (
+            <>
+              <p className="text-[10px] font-black uppercase text-gray-500 mb-2">Pilih Toko Penjual:</p>
+              {Object.keys(conversations).map((sellerName) => {
+                const lastMsg = conversations[sellerName][conversations[sellerName].length - 1];
+                return (
+                  <div
+                    key={sellerName + (lastMsg?.id || '')}
+                    onClick={() => setActiveSeller(sellerName)}
+                    className="bg-white border-2 border-black p-3 shadow-brutal hover:bg-yellow-300 cursor-pointer transition flex justify-between items-center"
+                  >
+                    <div>
+                      <h4 className="font-black text-xs uppercase">🏪 {sellerName}</h4>
+                      <p className="text-[11px] font-bold text-gray-600 line-clamp-1 mt-0.5">
+                        {lastMsg ? lastMsg.text : 'Belum ada pesan'}
+                      </p>
+                    </div>
+                    <span className="text-xs font-black">→</span>
+                  </div>
+                );
+              })}
+            </>
+          )}
         </div>
       ) : (
-        /* Tampilan 2: Ruang Obrolan Toko Aktif */
         <>
           <div className="flex-grow p-4 overflow-y-auto space-y-3 bg-gray-50">
-            {currentMessages.map((m) => (
-              <div key={m.id} className={`flex flex-col ${m.sender === 'user' ? 'items-end' : 'items-start'}`}>
+            {currentMessages.map((m, idx) => (
+              <div key={m.id || idx} className={`flex flex-col ${m.sender === 'user' ? 'items-end' : 'items-start'}`}>
                 <span className="text-[9px] font-black uppercase text-gray-500 mb-0.5">
-                  {m.sender === 'user' ? 'Anda' : activeSeller}
+                  {m.sender === 'user' ? 'Anda' : (activeCustomer || activeSeller)}
                 </span>
                 <div className={`p-2.5 border-2 border-black max-w-[85%] text-xs font-bold shadow-brutal ${
                   m.sender === 'user' ? 'bg-yellow-300 text-black' : 'bg-white text-black'
@@ -101,18 +197,19 @@ export default function ChatDrawer() {
               </div>
             ))}
           </div>
-
           <form onSubmit={handleSend} className="p-2 bg-white border-t-4 border-black flex gap-2">
             <input
               type="text"
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              placeholder={`Tanya ${activeSeller}...`}
+              placeholder={placeholder || 'Tulis pesan...'}
+              disabled={!canSend}
               className="flex-grow border-2 border-black p-2 font-bold text-xs focus:outline-none"
             />
             <button 
               type="submit" 
-              className="bg-black text-white font-black px-4 py-2 border-2 border-black text-xs uppercase shadow-brutal hover:bg-yellow-300 hover:text-black transition"
+              disabled={!canSend}
+              className="bg-black text-white font-black px-4 py-2 border-2 border-black text-xs uppercase shadow-brutal hover:bg-yellow-300 hover:text-black transition disabled:opacity-50"
             >
               Kirim
             </button>
