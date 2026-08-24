@@ -31,3 +31,37 @@
 .animate-marquee:hover {
   animation-play-state: paused;
 }
+
+/* ==========================================
+   CLEANUP TOTAL BANNER GOOGLE TRANSLATE
+   ========================================== */
+
+/* 1. Sembunyikan Iframe Banner Atas Google */
+.goog-te-banner-frame,
+.goog-te-banner-frame.skiptranslate,
+iframe.skiptranslate,
+.VIpgft-a4860-whsOnd-HbdGl-bCaHTe {
+  display: none !important;
+  visibility: hidden !important;
+  height: 0 !important;
+  width: 0 !important;
+}
+
+/* 2. Paksa HTML & Body Kembali ke Posisi 0px Paling Atas */
+html {
+  top: 0px !important;
+}
+
+body {
+  top: 0px !important;
+  position: static !important;
+}
+
+/* 3. Sembunyikan Pop-up Tooltip Highlight saat Teks Disorot */
+#goog-gt-tt,
+.goog-te-balloon-frame,
+.goog-text-highlight {
+  display: none !important;
+  box-shadow: none !important;
+  background-color: transparent !important;
+}

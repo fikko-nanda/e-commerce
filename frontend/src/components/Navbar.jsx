@@ -2,6 +2,7 @@ import { useContext, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
 import { CartContext } from '../context/CartContext';
+import GoogleTranslate from './GoogleTranslate';
 import LoginModal from './LoginModal';
 import CartDrawer from './CartDrawer';
 
@@ -29,6 +30,9 @@ export default function Navbar() {
         </Link>
 
         <div className="flex items-center gap-3 md:gap-4">
+          {/* Tombol Kustom Auto-Translate */}
+          <GoogleTranslate />
+
           {user?.role === 'admin' && (
             <Link
               to="/admin"
