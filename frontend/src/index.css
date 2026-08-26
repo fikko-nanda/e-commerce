@@ -32,11 +32,7 @@
   animation-play-state: paused;
 }
 
-/* ==========================================
-   CLEANUP TOTAL BANNER GOOGLE TRANSLATE
-   ========================================== */
-
-/* 1. Sembunyikan Iframe Banner Atas Google */
+/*Sembunyikan Iframe Banner Atas Google */
 .goog-te-banner-frame,
 .goog-te-banner-frame.skiptranslate,
 iframe.skiptranslate,
