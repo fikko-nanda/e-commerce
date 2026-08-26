@@ -12,9 +12,8 @@ export default function ReviewTab({ reviews, replyInputs, setReplyInputs, handle
       <h2 className="text-xl font-black uppercase border-b-2 border-black pb-2">Ulasan Produk dari Pembeli</h2>
       <div className="space-y-4">
         {reviews.map((rev) => {
-          // Normalisasi properti agar aman dari berbagai variasi key backend Django
-          const productName = rev.productName || rev.product_name || rev.product?.name || 'Produk WarMart';
-          const buyerName = rev.buyer || rev.buyer_username || rev.user_email || 'Pembeli';
+          const productName = rev.productName || rev.product_name || 'Produk WarMart';
+          const buyerName = rev.buyer || rev.username || 'Pembeli';
           const reviewDate = rev.date || (rev.created_at ? rev.created_at.split('T')[0] : '');
           const replyText = rev.reply || rev.seller_reply || '';
 
@@ -30,12 +29,12 @@ export default function ReviewTab({ reviews, replyInputs, setReplyInputs, handle
                   </p>
                 </div>
                 <div className="text-yellow-500 text-sm font-black">
-                  {'⭐'.repeat(Number(rev.rating || 5))}
+                  {'⭐'.repeat(Math.max(1, Math.min(5, Number(rev.rating || 5))))}
                 </div>
               </div>
 
               <p className="text-xs font-bold text-black bg-white p-2 border border-black">
-                {rev.comment || rev.review_text || '-'}
+                {rev.comment || '-'}
               </p>
 
               {replyText ? (

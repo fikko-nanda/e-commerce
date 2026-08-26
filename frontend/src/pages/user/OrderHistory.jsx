@@ -66,7 +66,7 @@ export default function OrderHistory() {
     };
   }, [location.search]);
 
-const handleSubmitReview = async (e) => {
+  const handleSubmitReview = async (e) => {
     e.preventDefault();
     if (!reviewModalOrder) return;
 
@@ -74,18 +74,27 @@ const handleSubmitReview = async (e) => {
       const productId = reviewModalOrder.product?.id || reviewModalOrder.product_id || reviewModalOrder.id;
 
       await reviewService.createReview({
-        order_id: reviewModalOrder.id,  // Ubah dari 'order' ke 'order_id'
-        product_id: productId,          // Ubah dari 'product' ke 'product_id'
+        order_id: reviewModalOrder.id,
+        product_id: productId,
         rating: Number(reviewForm.rating),
         comment: reviewForm.comment,
       });
 
       showToast('Ulasan berhasil dikirim ke Penjual!', 'success');
+
+      // Update status is_reviewed secara lokal agar tombol berganti otomatis tanpa perlu refresh
+      setOrders((prevOrders) =>
+        prevOrders.map((ord) =>
+          ord.id === reviewModalOrder.id ? { ...ord, is_reviewed: true, has_review: true } : ord
+        )
+      );
+
       setReviewModalOrder(null);
       setReviewForm({ rating: 5, comment: '' });
     } catch (err) {
       console.error('Error detail:', err?.response?.data);
-      showToast('Gagal mengirim ulasan.', 'error');
+      const errorMsg = err?.response?.data?.order_id?.[0] || 'Gagal mengirim ulasan.';
+      showToast(errorMsg, 'error');
     }
   };
 
@@ -142,6 +151,9 @@ const handleSubmitReview = async (e) => {
             const trackingNo = order.tracking_number || order.resi || order.tracking_code;
             const courierName = order.courier_name || order.courier || 'J&T Express';
 
+            // Pengecekan status apakah pesanan sudah pernah diulas
+            const isAlreadyReviewed = order.is_reviewed || order.has_review || false;
+
             return (
               <div key={order.id || idx} className="bg-white border-4 border-black p-5 shadow-brutal">
                 <div className="flex flex-wrap justify-between items-center gap-2 mb-3 border-b-2 border-black pb-2">
@@ -191,17 +203,23 @@ const handleSubmitReview = async (e) => {
                   </div>
                 )}
 
-                {/* TOMBOL BERI ULASAN (Hanya muncul jika status pesanan SELESAI) */}
+                {/* TOMBOL BERI ULASAN (Diperbarui dengan logika pengecekan isAlreadyReviewed) */}
                 {displayStatus === 'SELESAI' && (
                   <div className="mt-4 pt-3 border-t-2 border-dashed border-black flex justify-between items-center">
                     <span className="text-[10px] font-black uppercase text-gray-600">Pesanan telah selesai diterima.</span>
-                    <button
-                      type="button"
-                      onClick={() => setReviewModalOrder(order)}
-                      className="bg-yellow-300 text-black font-black px-3 py-1.5 text-xs uppercase border-2 border-black shadow-brutal hover:bg-black hover:text-white transition cursor-pointer"
-                    >
-                      ⭐ Beri Ulasan
-                    </button>
+                    {isAlreadyReviewed ? (
+                      <span className="bg-gray-200 text-gray-700 font-black px-3 py-1.5 text-xs uppercase border-2 border-black">
+                        ✓ SUDAH DIULAS
+                      </span>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => setReviewModalOrder(order)}
+                        className="bg-yellow-300 text-black font-black px-3 py-1.5 text-xs uppercase border-2 border-black shadow-brutal hover:bg-black hover:text-white transition cursor-pointer"
+                      >
+                        ⭐ Beri Ulasan
+                      </button>
+                    )}
                   </div>
                 )}
               </div>

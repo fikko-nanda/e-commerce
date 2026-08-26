@@ -49,11 +49,13 @@ export default function StoresTab({
             </thead>
             <tbody>
               {stores.map((store) => {
-                const currentStatus = store.status || 'active';
+                const currentStatus = store.status || 'pending_review';
                 const statusMeta = statusLabels[currentStatus] || {
                   label: currentStatus.toUpperCase(),
                   color: 'bg-gray-200 text-black',
                 };
+                
+                const isPending = currentStatus === 'pending_review' || currentStatus === 'pending';
                 const isSuspended = currentStatus === 'suspended';
                 const isLoading = actionId === store.id;
 
@@ -62,28 +64,50 @@ export default function StoresTab({
                     <td className="p-3 border-r-2 border-black font-black uppercase">{store.store_name}</td>
                     <td className="p-3 border-r-2 border-black">{store.owner_email || store.email || '-'}</td>
                     <td className="p-3 border-r-2 border-black">
-                      {/* Badge status dengan tanda merah jika tersuspend */}
                       <span className={`px-2 py-1 text-[10px] font-black border border-black uppercase ${
-                        isSuspended ? 'bg-red-500 text-white' : statusMeta.color
+                        isSuspended ? 'bg-red-500 text-white' : isPending ? 'bg-orange-300 text-black' : statusMeta.color
                       }`}>
-                        {isSuspended ? 'TER-SUSPEND' : statusMeta.label}
+                        {isSuspended ? 'TER-SUSPEND' : isPending ? 'MENUNGGU ACC' : statusMeta.label}
                       </span>
                     </td>
                     <td className="p-3 border-r-2 border-black">{formatDate(store.created_at || new Date())}</td>
-                    <td className="p-3 flex gap-2">
-                      {/* Tombol Suspend / Aktifkan dinamis */}
-                      <button
-                        type="button"
-                        disabled={isLoading}
-                        onClick={() => onStatusChange(store, isSuspended ? 'active' : 'suspended')}
-                        className={`px-3 py-1 border border-black text-[10px] uppercase font-black transition shadow-brutal cursor-pointer ${
-                          isSuspended
-                            ? 'bg-green-400 text-black hover:bg-black hover:text-white'
-                            : 'bg-red-500 text-white hover:bg-black'
-                        }`}
-                      >
-                        {isLoading ? 'Memproses...' : isSuspended ? '✓ Aktifkan' : '🚫 Suspend'}
-                      </button>
+                    <td className="p-3">
+                      <div className="flex flex-wrap gap-2">
+                        {isLoading ? (
+                          <span className="text-[10px] font-black uppercase text-gray-500">Memproses...</span>
+                        ) : isPending ? (
+                          /* Jika toko baru mendaftar / PENDING ACC */
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => onStatusChange(store, 'active')}
+                              className="px-3 py-1 bg-green-400 text-black border border-black text-[10px] uppercase font-black transition shadow-brutal hover:bg-black hover:text-white cursor-pointer"
+                            >
+                              ✓ Setujui (ACC)
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => onStatusChange(store, 'rejected')}
+                              className="px-3 py-1 bg-red-500 text-white border border-black text-[10px] uppercase font-black transition shadow-brutal hover:bg-black cursor-pointer"
+                            >
+                              ✕ Tolak
+                            </button>
+                          </>
+                        ) : (
+                          /* Jika toko sudah AKTIF atau SUSPEND */
+                          <button
+                            type="button"
+                            onClick={() => onStatusChange(store, isSuspended ? 'active' : 'suspended')}
+                            className={`px-3 py-1 border border-black text-[10px] uppercase font-black transition shadow-brutal cursor-pointer ${
+                              isSuspended
+                                ? 'bg-green-400 text-black hover:bg-black hover:text-white'
+                                : 'bg-red-500 text-white hover:bg-black'
+                            }`}
+                          >
+                            {isSuspended ? '✓ Aktifkan Kembali' : '🚫 Suspend'}
+                          </button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 );
