@@ -1,4 +1,3 @@
-// Barrel export — import dari satu tempat: import { authService, productService } from '../services'
 export { default as API } from './api';
 export { default as authService } from './authService';
 export { default as storeService } from './storeService';

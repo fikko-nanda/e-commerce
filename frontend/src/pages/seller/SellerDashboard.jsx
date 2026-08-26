@@ -3,7 +3,7 @@ import { AuthContext } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
 import { storeService, productService, orderService, reviewService } from '../../services';
 
-// Import komponen anak yang sudah dipisah
+// Import komponen anak
 import ShippingModal from './components/ShippingModal';
 import ProductTab from './components/ProductTab';
 import OrderTab from './components/OrderTab';
@@ -39,7 +39,7 @@ function getOrderStatus(order) {
   const payMethod = (order.payment_method || '').toLowerCase();
 
   if (shipStatus === 'shipped') return 'Dikirim';
-  if (shipStatus === 'delivered') return 'Selesai';
+  if (shipStatus === 'delivered' || shipStatus === 'selesai') return 'Selesai';
   if (payStatus === 'paid' || payMethod === 'cod') return 'Perlu Dikirim';
   if (payStatus === 'failed') return 'Gagal';
   if (payStatus === 'expired') return 'Kadaluarsa';
@@ -78,6 +78,18 @@ function normalizeOrder(o) {
   };
 }
 
+function normalizeReview(r) {
+  return {
+    id: r.id,
+    productName: r.product_name || r.product?.name || 'Produk WarMart',
+    buyer: r.username || r.user?.username || r.buyer_username || 'Pembeli',
+    rating: Number(r.rating || 5),
+    comment: r.comment || r.review_text || '',
+    date: (r.created_at || '').split('T')[0],
+    reply: r.reply || r.seller_reply || '',
+  };
+}
+
 export default function SellerDashboard() {
   const { user } = useContext(AuthContext) || {};
   const { showToast } = useToast();
@@ -107,17 +119,7 @@ export default function SellerDashboard() {
   const [isVoucherModalOpen, setIsVoucherModalOpen] = useState(false);
   const [voucherForm, setVoucherForm] = useState({ code: '', type: 'fixed', amount: '', minSpend: '', quota: '' });
 
-  const [reviews, setReviews] = useState([
-    {
-      id: 101,
-      productName: 'Heavyweight Tee Black',
-      buyer: 'rizky_streetwear',
-      rating: 5,
-      comment: 'Bahan tebal mantap! Jahitan rapi banget, pengiriman super cepat.',
-      date: '2026-08-15',
-      reply: 'Terima kasih bosku sudah belanja! Ditunggu orderan berikutnya 🔥',
-    },
-  ]);
+  const [reviews, setReviews] = useState([]);
   const [replyInputs, setReplyInputs] = useState({});
 
   const [wallet, setWallet] = useState({
@@ -167,7 +169,7 @@ export default function SellerDashboard() {
       try {
         const res = await productService.getMyProducts();
         if (!cancelled) {
-          const list = res?.data?.data || res?.data || [];
+          const list = res?.data?.results || res?.data?.data || res?.data || [];
           setProducts(list.map(normalizeProduct));
         }
       } catch {
@@ -179,7 +181,7 @@ export default function SellerDashboard() {
       try {
         const res = await orderService.getStoreOrders();
         if (!cancelled) {
-          const list = res?.data?.data || res?.data || [];
+          const list = res?.data?.results || res?.data?.data || res?.data || [];
           setOrders(list.map(normalizeOrder));
         }
       } catch {
@@ -191,8 +193,9 @@ export default function SellerDashboard() {
       try {
         const revRes = await reviewService.getStoreReviews();
         if (!cancelled && revRes?.data) {
-          const list = revRes.data.data || revRes.data;
-          if (Array.isArray(list) && list.length > 0) setReviews(list);
+          const rawData = revRes.data.results || revRes.data.data || revRes.data;
+          const list = Array.isArray(rawData) ? rawData : [];
+          setReviews(list.map(normalizeReview));
         }
       } catch {
         // Abaikan
@@ -343,6 +346,7 @@ export default function SellerDashboard() {
         courier_name: courier,
         tracking_number: resiCode,
         shipping_status: newStatus,
+        payment_status: newStatus === 'delivered' ? 'paid' : activeOrder?.payment_status,
       });
       const updated = res?.data?.data || res?.data;
       if (updated) {
@@ -358,18 +362,19 @@ export default function SellerDashboard() {
     try {
       const activeOrder = orders.find((o) => o.id === orderId);
       const courier = activeOrder?.courier_name || 'J&T Express';
-      const resiCode = `RESI-${String(orderId).replace(/[^a-zA-Z0-9]/g, '').slice(-8).toUpperCase()}`;
+      const resiCode = activeOrder?.tracking_number || `RESI-${String(orderId).replace(/[^a-zA-Z0-9]/g, '').slice(-8).toUpperCase()}`;
 
       await orderService.updateShipping(orderId, {
         courier_name: courier,
         tracking_number: resiCode,
-        shipping_status: 'shipped',
+        shipping_status: 'delivered',
+        payment_status: 'paid',
       });
 
-      showToast('Status pesanan berhasil diperbarui!', 'success');
+      showToast('Status pesanan berhasil dikonfirmasi Lunas & Selesai!', 'success');
 
       setOrders((prev) =>
-        prev.map((o) => (o.id === orderId ? { ...o, payment_status: 'paid', status: 'Dikirim', shipping_status: 'shipped', tracking_number: resiCode } : o))
+        prev.map((o) => (o.id === orderId ? { ...o, payment_status: 'paid', status: 'Selesai', shipping_status: 'delivered', tracking_number: resiCode } : o))
       );
     } catch {
       showToast('Gagal mengubah status pesanan.', 'error');

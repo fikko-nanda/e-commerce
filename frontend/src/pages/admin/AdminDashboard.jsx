@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { reviewService, storeService, userService } from '../../services';
+import { reviewService, storeService, userService, productService, orderService } from '../../services';
 
 import AdminHeader from './components/AdminHeader';
 import AdminStats from './components/AdminStats';
@@ -7,181 +7,6 @@ import AdminTabs from './components/AdminTabs';
 import StoresTab from './components/StoresTab';
 import UsersTab from './components/UsersTab';
 import ReviewsTab from './components/ReviewsTab';
-
-// Data dummy cadangan bila API Backend offline / Unauthenticated
-const DUMMY_STORES = [
-  {
-    id: 'store-1',
-    store_name: 'WARMART OFFICIAL',
-    owner_email: 'budi@warmart.com',
-    owner_username: 'budi',
-    status: 'active',
-    phone: '081234567890',
-    address: 'Jl. Sudirman No. 123, Jakarta',
-    created_at: new Date('2026-01-05').toISOString(),
-  },
-  {
-    id: 'store-2',
-    store_name: 'URBAN CORE',
-    owner_email: 'siti@urbancore.com',
-    owner_username: 'siti',
-    status: 'pending_review',
-    phone: '0899123456',
-    address: 'Jl. Asia Afrika No. 8, Bandung',
-    created_at: new Date('2026-01-12').toISOString(),
-  },
-];
-
-const DUMMY_USERS = [
-  {
-    id: 'user-1',
-    email: 'budi@warmart.com',
-    username: 'budi',
-    role: 'seller',
-    is_active: true,
-    date_joined: new Date('2026-01-05').toISOString(),
-    store_name: 'WARMART OFFICIAL',
-    store_status: 'active',
-  },
-  {
-    id: 'user-2',
-    email: 'siti@urbancore.com',
-    username: 'siti',
-    role: 'buyer',
-    is_active: true,
-    date_joined: new Date('2026-01-12').toISOString(),
-    store_name: 'URBAN CORE',
-    store_status: 'pending_review',
-  },
-  {
-    id: 'user-3',
-    email: 'troll@spam.com',
-    username: 'trollking',
-    role: 'buyer',
-    is_active: false,
-    date_joined: new Date('2026-01-20').toISOString(),
-    store_name: null,
-    store_status: null,
-  },
-];
-
-const DUMMY_PRODUCTS = [
-  {
-    id: 'prod-1',
-    name: 'WARMART Heavyweight Graphic Tee',
-    price: 189000,
-    stock: 45,
-    category: 'tshirt',
-    store_name: 'WARMART OFFICIAL',
-    sold_count: 120,
-    created_at: new Date('2026-01-10').toISOString(),
-  },
-  {
-    id: 'prod-2',
-    name: 'Cyberpunk Black Pullover Hoodie',
-    price: 349000,
-    stock: 12,
-    category: 'hoodie',
-    store_name: 'WARMART OFFICIAL',
-    sold_count: 85,
-    created_at: new Date('2026-01-12').toISOString(),
-  },
-  {
-    id: 'prod-3',
-    name: 'Tactical Cargo Pants Black',
-    price: 279000,
-    stock: 0,
-    category: 'pants',
-    store_name: 'URBAN CORE',
-    sold_count: 40,
-    created_at: new Date('2026-01-15').toISOString(),
-  },
-];
-
-const DUMMY_TRANSACTIONS = [
-  {
-    id: 'TRX-9901',
-    buyer_name: 'street_kid',
-    store_name: 'WARMART OFFICIAL',
-    total_amount: 378000,
-    status: 'completed',
-    payment_method: 'QRIS',
-    created_at: new Date('2026-02-01').toISOString(),
-  },
-  {
-    id: 'TRX-9902',
-    buyer_name: 'hypebeast_user',
-    store_name: 'URBAN CORE',
-    total_amount: 349000,
-    status: 'paid',
-    payment_method: 'Transfer Bank',
-    created_at: new Date('2026-02-10').toISOString(),
-  },
-  {
-    id: 'TRX-9903',
-    buyer_name: 'budi',
-    store_name: 'WARMART OFFICIAL',
-    total_amount: 149000,
-    status: 'pending',
-    payment_method: 'E-Wallet',
-    created_at: new Date('2026-02-18').toISOString(),
-  },
-];
-
-const DUMMY_REVIEWS = [
-  {
-    id: 'rev-1',
-    username: 'street_kid',
-    product_name: 'WARMART Heavyweight Graphic Tee',
-    store_name: 'WARMART OFFICIAL',
-    rating: 5,
-    comment: 'Sablon awet, bahan tebal sesuai deskripsi. Recommended seller!',
-    created_at: new Date('2026-01-20').toISOString(),
-  },
-  {
-    id: 'rev-2',
-    username: 'hypebeast_user',
-    product_name: 'Cyberpunk Black Pullover Hoodie',
-    store_name: 'URBAN CORE',
-    rating: 4,
-    comment: 'Desain keren, tapi jahitan lengan sedikit longgar. Overall mantap.',
-    created_at: new Date('2026-01-22').toISOString(),
-  },
-  {
-    id: 'rev-3',
-    username: 'buyer.anonim',
-    product_name: 'Tactical Cargo Pants Black',
-    store_name: 'WARMART OFFICIAL',
-    rating: 2,
-    comment: 'Ukuran tidak sesuai tabel. Kecewa dengan kualitas jahitan.',
-    created_at: new Date('2026-01-25').toISOString(),
-  },
-];
-
-const DUMMY_VOUCHERS = [
-  {
-    id: 'v-1',
-    code: 'WARMART2026',
-    discount_type: 'percentage',
-    discount_value: 20,
-    min_purchase: 100000,
-    max_uses: 100,
-    used_count: 42,
-    valid_until: '2026-12-31',
-    is_active: true,
-  },
-  {
-    id: 'v-2',
-    code: 'GAJIANHEMAT',
-    discount_type: 'fixed',
-    discount_value: 50000,
-    min_purchase: 250000,
-    max_uses: 50,
-    used_count: 50,
-    valid_until: '2026-02-28',
-    is_active: false,
-  },
-];
 
 const normalizeList = (res) => {
   const d = res?.data;
@@ -208,24 +33,30 @@ export default function AdminDashboard() {
   const [activeTab, setActiveTab] = useState('stores');
   const [searchQuery, setSearchQuery] = useState('');
 
-  // Stores State
-  const [stores, setStores] = useState(DUMMY_STORES);
+  // States
+  const [stores, setStores] = useState([]);
   const [storesLoading, setStoresLoading] = useState(false);
   const [storeActionId, setStoreActionId] = useState(null);
   const [storeStatusFilter, setStoreStatusFilter] = useState('all');
 
-  // Users State
-  const [users, setUsers] = useState(DUMMY_USERS);
+  const [users, setUsers] = useState([]);
   const [usersLoading, setUsersLoading] = useState(false);
   const [userActionId, setUserActionId] = useState(null);
   const [userRoleFilter, setUserRoleFilter] = useState('all');
 
-  // Products & Transactions State
-  const [products, setProducts] = useState(DUMMY_PRODUCTS);
-  const [transactions] = useState(DUMMY_TRANSACTIONS);
+  const [products, setProducts] = useState([]);
 
-  // Vouchers State
-  const [vouchers, setVouchers] = useState(DUMMY_VOUCHERS);
+  const [transactions, setTransactions] = useState([]);
+  const [transactionsLoading, setTransactionsLoading] = useState(false);
+
+  const [vouchers, setVouchers] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem('warmart_vouchers') || '[]');
+    } catch {
+      return [];
+    }
+  });
+
   const [newVoucher, setNewVoucher] = useState({
     code: '',
     discount_type: 'percentage',
@@ -235,13 +66,16 @@ export default function AdminDashboard() {
     valid_until: '',
   });
 
-  // Reviews State
-  const [reviews, setReviews] = useState(DUMMY_REVIEWS);
+  const [reviews, setReviews] = useState([]);
   const [reviewsLoading, setReviewsLoading] = useState(false);
   const [deletingId, setDeletingId] = useState(null);
   const [filterRating, setFilterRating] = useState('all');
 
-  // ---- Fetch Stores Dengan Membaca Status Permanen LocalStorage ----
+  useEffect(() => {
+    localStorage.setItem('warmart_vouchers', JSON.stringify(vouchers));
+  }, [vouchers]);
+
+  // Fetch API Functions
   const fetchStores = async () => {
     setStoresLoading(true);
     try {
@@ -262,7 +96,6 @@ export default function AdminDashboard() {
 
       const combinedMap = new Map();
 
-      // 1. Masukkan pendaftaran toko pending lokal
       pendingLocal.forEach((s) => {
         if (s && s.store_name) {
           const nameKey = s.store_name.toLowerCase();
@@ -273,7 +106,6 @@ export default function AdminDashboard() {
         }
       });
 
-      // 2. Masukkan toko dari backend
       fetchedList.forEach((s) => {
         const nameKey = (s.store_name || s.name || '').toLowerCase();
         if (nameKey) {
@@ -284,11 +116,9 @@ export default function AdminDashboard() {
         }
       });
 
-      const finalStores = Array.from(combinedMap.values());
-      setStores(finalStores.length > 0 ? finalStores : DUMMY_STORES);
+      setStores(Array.from(combinedMap.values()));
     } catch (err) {
-      console.warn('Gagal memuat API Stores, menggunakan fallback local:', err);
-      setStores(DUMMY_STORES);
+      console.warn('Gagal memuat API Stores:', err);
     } finally {
       setStoresLoading(false);
     }
@@ -299,14 +129,108 @@ export default function AdminDashboard() {
     try {
       if (userService && typeof userService.getAll === 'function') {
         const res = await userService.getAll();
-        const list = normalizeList(res);
-        if (list.length > 0) setUsers(list);
+        setUsers(normalizeList(res));
       }
     } catch (err) {
-      console.warn('Gagal memuat API Users (Gunakan Data Dummy):', err?.message || err);
-      setUsers(DUMMY_USERS);
+      console.warn('Gagal memuat API Users:', err);
     } finally {
       setUsersLoading(false);
+    }
+  };
+
+  const fetchTransactions = async () => {
+    setTransactionsLoading(true);
+    try {
+      if (orderService && typeof orderService.getOrders === 'function') {
+        const res = await orderService.getOrders();
+        const list = normalizeList(res);
+        const formatted = list.map((t, idx) => {
+          let actualBuyer =
+            t.buyer_username ||
+            (typeof t.buyer === 'object' ? t.buyer?.username || t.buyer?.email : null) ||
+            t.customer_name ||
+            'Pembeli';
+
+          const payStatus = String(t.payment_status || t.status || '').toLowerCase();
+          const shipStatus = String(t.shipping_status || '').toLowerCase();
+
+          let displayStatus = 'PENDING';
+          if (['paid', 'lunas', 'success'].includes(payStatus) || ['delivered', 'selesai', 'completed'].includes(shipStatus)) {
+            displayStatus = 'PAID';
+          } else if (['failed', 'batal', 'cancelled', 'deny', 'expire'].includes(payStatus)) {
+            displayStatus = 'FAILED';
+          }
+
+          return {
+            id: t.id || t.order_id || t.order_number || `TRX-${idx + 1}`,
+            buyer_name: actualBuyer,
+            store_name: t.store_name || t.product?.store_name || t.product?.store?.store_name || 'Toko WarMart',
+            total_amount: Number(t.total_price || t.price || t.amount || t.grand_total || 0),
+            status: displayStatus,
+            payment_method: t.payment_method || 'Online Payment',
+            created_at: t.created_at || new Date().toISOString(),
+          };
+        });
+        setTransactions(formatted);
+      }
+    } catch (err) {
+      console.warn('Gagal memuat API Transactions:', err);
+    } finally {
+      setTransactionsLoading(false);
+    }
+  };
+
+  const fetchProducts = async () => {
+    try {
+      if (productService) {
+        const fetchFn = productService.getAll || productService.getProducts;
+        if (typeof fetchFn === 'function') {
+          const res = await fetchFn();
+          const list = normalizeList(res);
+
+          let currentOrders = [];
+          try {
+            if (orderService && typeof orderService.getOrders === 'function') {
+              const resOrders = await orderService.getOrders();
+              currentOrders = normalizeList(resOrders);
+            }
+          } catch (e) {
+            console.warn('Gagal kalkulasi orders:', e);
+          }
+
+          const formatted = list.map((p) => {
+            const productStock = p.stock ?? p.stok ?? 0;
+            let productSold = p.sold_count ?? p.sold ?? p.total_sold ?? p.sales ?? p.sales_count ?? 0;
+
+            if (Number(productSold) === 0 && currentOrders.length > 0) {
+              const matchedOrders = currentOrders.filter((ord) => {
+                const ordProductId = ord.product?.id || ord.product_id || ord.product;
+                const isMatch = String(ordProductId) === String(p.id);
+                const isPaid = ['paid', 'shipped', 'delivered', 'completed', 'success', 'lunas', 'selesai'].includes(
+                  (ord.payment_status || ord.shipping_status || ord.status || '').toLowerCase()
+                );
+                return isMatch && isPaid;
+              });
+
+              productSold = matchedOrders.reduce((sum, ord) => sum + Number(ord.quantity || 1), 0);
+            }
+
+            return {
+              id: p.id,
+              name: p.name || p.title || 'Produk Noname',
+              price: Number(p.price || 0),
+              stock: productStock,
+              category: p.category || 'fashion',
+              store_name: p.store_name || p.store?.store_name || 'WARMART STORE',
+              sold_count: productSold,
+              created_at: p.created_at || new Date().toISOString(),
+            };
+          });
+          setProducts(formatted);
+        }
+      }
+    } catch (err) {
+      console.warn('Gagal memuat API Products:', err);
     }
   };
 
@@ -316,27 +240,58 @@ export default function AdminDashboard() {
       if (reviewService && typeof reviewService.getAll === 'function') {
         const res = await reviewService.getAll();
         const list = normalizeList(res);
-        if (list.length > 0) setReviews(list);
+        const formatted = list.map((r) => ({
+          id: r.id,
+          username: r.username || r.user?.username || 'Pembeli',
+          product_name: r.product_name || r.product?.name || 'Produk',
+          store_name: r.store_name || r.product?.store?.store_name || 'Toko',
+          rating: Number(r.rating || 5),
+          comment: r.comment || '-',
+          created_at: r.created_at || new Date().toISOString(),
+        }));
+        setReviews(formatted);
       }
     } catch (err) {
       console.warn('Gagal memuat API Reviews:', err);
-      setReviews(DUMMY_REVIEWS);
     } finally {
       setReviewsLoading(false);
     }
   };
 
+  // 1. Trigger saat tab aktif berganti
   useEffect(() => {
-    let isMounted = true;
-    const loadData = async () => {
-      if (!isMounted) return;
-      if (activeTab === 'stores') await fetchStores();
-      if (activeTab === 'users') await fetchUsers();
-      if (activeTab === 'reviews') await fetchReviews();
+    const loadData = () => {
+      if (activeTab === 'stores') fetchStores();
+      if (activeTab === 'users') fetchUsers();
+      if (activeTab === 'products') fetchProducts();
+      if (activeTab === 'transactions') fetchTransactions();
+      if (activeTab === 'reviews') fetchReviews();
     };
+
     loadData();
+  }, [activeTab]);
+
+  // 2. Auto-Polling 5 detik & Auto-Refresh saat tab difokuskan kembali
+  useEffect(() => {
+    const refreshData = () => {
+      if (activeTab === 'stores') fetchStores();
+      if (activeTab === 'users') fetchUsers();
+      if (activeTab === 'products') fetchProducts();
+      if (activeTab === 'transactions') fetchTransactions();
+      if (activeTab === 'reviews') fetchReviews();
+    };
+
+    const interval = setInterval(refreshData, 5000);
+
+    const handleFocus = () => {
+      refreshData();
+    };
+
+    window.addEventListener('focus', handleFocus);
+
     return () => {
-      isMounted = false;
+      clearInterval(interval);
+      window.removeEventListener('focus', handleFocus);
     };
   }, [activeTab]);
 
@@ -345,101 +300,75 @@ export default function AdminDashboard() {
     setSearchQuery('');
   };
 
-  // ---- Aksi Suspend / Aktifkan Toko Permanen ----
+  // Actions
   const handleStoreStatus = async (store, newStatus) => {
-    const verb =
-      {
-        active: 'verifikasi/aktifkan',
-        rejected: 'tolak',
-        suspended: 'suspend',
-      }[newStatus] || newStatus;
-
-    if (!confirm(`Yakin ingin ${verb} toko "${store.store_name}"?`)) return;
+    if (!confirm(`Yakin ingin mengubah status toko "${store.store_name}"?`)) return;
 
     setStoreActionId(store.id);
-
-    // 1. Update UI secara langsung
-    setStores((prev) =>
-      prev.map((s) => (s.id === store.id ? { ...s, status: newStatus } : s))
-    );
-
-    // 2. Simpan status ke LocalStorage secara permanen berdasarkan NAMA TOKO
     try {
       const storeKey = store.store_name.toLowerCase();
       const savedStatuses = JSON.parse(localStorage.getItem('warmart_store_statuses') || '{}');
       savedStatuses[storeKey] = newStatus;
       localStorage.setItem('warmart_store_statuses', JSON.stringify(savedStatuses));
-    } catch (e) {
-      console.error(e);
-    }
 
-    // 3. Panggil service secara aman
-    try {
       if (storeService && typeof storeService.adminUpdateStatus === 'function') {
         await storeService.adminUpdateStatus(store.id, newStatus);
       }
+      fetchStores();
     } catch (err) {
-      console.warn('Simpan status lokal aktif.', err);
+      console.warn(err);
     } finally {
       setStoreActionId(null);
     }
   };
 
-  // ---- Aksi Users ----
   const handleUserSuspend = async (user, action) => {
-    const verb = action === 'suspend' ? 'menangguhkan' : 'mengaktifkan kembali';
-    if (!confirm(`Yakin ingin ${verb} user "${user.email}"?`)) return;
+    if (!confirm(`Yakin ingin memproses akun "${user.email}"?`)) return;
 
     setUserActionId(user.id);
     try {
       if (userService) {
-        if (action === 'suspend' && typeof userService.suspend === 'function') {
-          await userService.suspend(user.id);
-        } else if (typeof userService.unsuspend === 'function') {
-          await userService.unsuspend(user.id);
-        }
+        if (action === 'suspend') await userService.suspend(user.id);
+        else await userService.unsuspend(user.id);
       }
-      await fetchUsers();
+      fetchUsers();
     } catch {
-      setUsers((prev) =>
-        prev.map((u) =>
-          u.id === user.id ? { ...u, is_active: action === 'unsuspend' } : u
-        )
-      );
+      console.warn('Gagal ubah status user');
     } finally {
       setUserActionId(null);
     }
   };
 
-  // ---- Aksi Products & Reviews ----
-  const handleDeleteProduct = (prodId) => {
+  const handleDeleteProduct = async (prodId) => {
     if (!confirm('Take down produk ini dari platform?')) return;
-    setProducts((prev) => prev.filter((p) => p.id !== prodId));
+    try {
+      if (productService && typeof productService.delete === 'function') {
+        await productService.delete(prodId);
+      }
+      fetchProducts();
+    } catch (err) {
+      console.warn(err);
+    }
   };
 
   const handleDeleteReview = async (reviewId) => {
-    if (!confirm('Hapus ulasan ini secara permanen? Tindakan tidak bisa dibatalkan.')) return;
-
+    if (!confirm('Hapus ulasan ini secara permanen?')) return;
     setDeletingId(reviewId);
     try {
       if (reviewService && typeof reviewService.delete === 'function') {
         await reviewService.delete(reviewId);
       }
-      setReviews((prev) => prev.filter((r) => r.id !== reviewId));
+      fetchReviews();
     } catch {
-      setReviews((prev) => prev.filter((r) => r.id !== reviewId));
+      console.warn('Gagal hapus ulasan');
     } finally {
       setDeletingId(null);
     }
   };
 
-  // ---- Aksi Vouchers ----
   const handleCreateVoucher = (e) => {
     e.preventDefault();
-    if (!newVoucher.code || !newVoucher.discount_value) {
-      alert('Isi kode voucher dan nilai diskon!');
-      return;
-    }
+    if (!newVoucher.code || !newVoucher.discount_value) return;
 
     const created = {
       id: `v-${Date.now()}`,
@@ -462,21 +391,9 @@ export default function AdminDashboard() {
       max_uses: '',
       valid_until: '',
     });
-    alert(`Voucher ${created.code} berhasil dibuat!`);
+    alert(`Voucher ${created.code} diterbitkan!`);
   };
 
-  const handleToggleVoucher = (id) => {
-    setVouchers((prev) =>
-      prev.map((v) => (v.id === id ? { ...v, is_active: !v.is_active } : v))
-    );
-  };
-
-  const handleDeleteVoucher = (id) => {
-    if (!confirm('Hapus voucher ini?')) return;
-    setVouchers((prev) => prev.filter((v) => v.id !== id));
-  };
-
-  // ---- Export CSV ----
   const handleExportCSV = () => {
     let exportData = [];
     if (activeTab === 'stores') exportData = stores;
@@ -505,12 +422,12 @@ export default function AdminDashboard() {
     document.body.removeChild(link);
   };
 
-  // Derived Stats
+  // Stats
   const totalStores = stores.length;
   const activeStores = stores.filter((s) => s.status === 'active').length;
   const totalUsers = users.length;
   const totalReviews = reviews.length;
-  const totalGMV = transactions.reduce((acc, t) => acc + t.total_amount, 0);
+  const totalGMV = transactions.reduce((acc, t) => acc + (t.total_amount || 0), 0);
   const avgRating =
     totalReviews > 0
       ? (reviews.reduce((sum, r) => sum + Number(r.rating || 0), 0) / totalReviews).toFixed(1)
@@ -522,7 +439,7 @@ export default function AdminDashboard() {
     return { star, count, percent };
   });
 
-  // Filtered Lists
+  // Filter Data
   const filteredStores = stores
     .filter((s) => storeStatusFilter === 'all' || s.status === storeStatusFilter)
     .filter(
@@ -564,7 +481,6 @@ export default function AdminDashboard() {
         (r.product_name || '').toLowerCase().includes(searchQuery.toLowerCase())
     );
 
-  // Helpers
   const formatDate = (isoStr) => {
     try {
       return new Date(isoStr).toLocaleDateString('id-ID', {
@@ -585,9 +501,12 @@ export default function AdminDashboard() {
   return (
     <div className="max-w-7xl mx-auto px-6 py-10">
       <div className="mb-6 bg-yellow-300 border-4 border-black p-3 text-xs font-black uppercase flex justify-between items-center shadow-brutal">
-        <span>⚡ MODE ADMIN DEV / TESTING (AKSES BYPASS AKTIF)</span>
-        <a href="/" className="bg-black text-white px-2 py-1 hover:bg-red-500 transition">
-          ← Kembali ke Home
+        <span className="flex items-center gap-2">
+          <span className="w-2.5 h-2.5 bg-green-500 rounded-full animate-ping"></span>
+          ⚡ PANEL KONTROL ADMIN WARMART (AUTO-SYNC LIVE)
+        </span>
+        <a href="/" className="bg-black text-white px-3 py-1 border border-black hover:bg-red-500 transition">
+          ← Ke Halaman Utama
         </a>
       </div>
 
@@ -614,7 +533,7 @@ export default function AdminDashboard() {
 
         <button
           onClick={handleExportCSV}
-          className="w-full sm:w-auto bg-green-400 text-black px-4 py-2 border-2 border-black font-black text-xs uppercase hover:bg-green-300 transition shadow-brutal"
+          className="w-full sm:w-auto bg-green-400 text-black px-4 py-2 border-2 border-black font-black text-xs uppercase hover:bg-green-300 transition shadow-brutal cursor-pointer"
         >
           📥 Export CSV ({activeTab.toUpperCase()})
         </button>
@@ -631,7 +550,7 @@ export default function AdminDashboard() {
       <div className="flex flex-wrap gap-2 my-4">
         <button
           onClick={() => handleTabSwitch('products')}
-          className={`px-3 py-1.5 border-2 border-black font-black text-xs uppercase ${
+          className={`px-3 py-1.5 border-2 border-black font-black text-xs uppercase cursor-pointer ${
             activeTab === 'products' ? 'bg-black text-white' : 'bg-white hover:bg-gray-200'
           }`}
         >
@@ -639,7 +558,7 @@ export default function AdminDashboard() {
         </button>
         <button
           onClick={() => handleTabSwitch('transactions')}
-          className={`px-3 py-1.5 border-2 border-black font-black text-xs uppercase ${
+          className={`px-3 py-1.5 border-2 border-black font-black text-xs uppercase cursor-pointer ${
             activeTab === 'transactions' ? 'bg-black text-white' : 'bg-white hover:bg-gray-200'
           }`}
         >
@@ -647,7 +566,7 @@ export default function AdminDashboard() {
         </button>
         <button
           onClick={() => handleTabSwitch('vouchers')}
-          className={`px-3 py-1.5 border-2 border-black font-black text-xs uppercase ${
+          className={`px-3 py-1.5 border-2 border-black font-black text-xs uppercase cursor-pointer ${
             activeTab === 'vouchers' ? 'bg-black text-white' : 'bg-white hover:bg-gray-200'
           }`}
         >
@@ -758,7 +677,7 @@ export default function AdminDashboard() {
               <div className="md:col-span-3">
                 <button
                   type="submit"
-                  className="w-full bg-black text-white p-3 border-2 border-black font-black text-xs uppercase hover:bg-red-500 transition shadow-brutal"
+                  className="w-full bg-black text-white p-3 border-2 border-black font-black text-xs uppercase hover:bg-red-500 transition shadow-brutal cursor-pointer"
                 >
                   🚀 Terbitkan Voucher
                 </button>
@@ -767,7 +686,7 @@ export default function AdminDashboard() {
           </div>
 
           <div className="bg-white border-4 border-black p-6 shadow-brutal">
-            <h2 className="text-xl font-black uppercase mb-4">Daftar Voucher Aktif & Kategori</h2>
+            <h2 className="text-xl font-black uppercase mb-4">Daftar Voucher Aktif</h2>
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs font-bold border-collapse border-2 border-black">
                 <thead>
@@ -782,44 +701,60 @@ export default function AdminDashboard() {
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredVouchers.map((v) => (
-                    <tr key={v.id} className="border-b border-black hover:bg-gray-50">
-                      <td className="p-3 border-r-2 border-black font-mono font-black text-sm">{v.code}</td>
-                      <td className="p-3 border-r-2 border-black">
-                        {v.discount_type === 'percentage'
-                          ? `${v.discount_value}%`
-                          : `Rp ${v.discount_value.toLocaleString('id-ID')}`}
-                      </td>
-                      <td className="p-3 border-r-2 border-black">Rp {v.min_purchase.toLocaleString('id-ID')}</td>
-                      <td className="p-3 border-r-2 border-black">
-                        {v.used_count} / {v.max_uses}
-                      </td>
-                      <td className="p-3 border-r-2 border-black">{v.valid_until}</td>
-                      <td className="p-3 border-r-2 border-black">
-                        <span
-                          className={`px-2 py-0.5 border border-black text-[10px] uppercase font-black ${
-                            v.is_active ? 'bg-green-400 text-black' : 'bg-red-400 text-white'
-                          }`}
-                        >
-                          {v.is_active ? 'AKTIF' : 'NONAKTIF'}
-                        </span>
-                      </td>
-                      <td className="p-3 flex gap-2">
-                        <button
-                          onClick={() => handleToggleVoucher(v.id)}
-                          className="bg-yellow-300 text-black px-2 py-1 border border-black text-[10px] uppercase font-black hover:bg-black hover:text-white transition"
-                        >
-                          {v.is_active ? 'Matikan' : 'Aktifkan'}
-                        </button>
-                        <button
-                          onClick={() => handleDeleteVoucher(v.id)}
-                          className="bg-red-500 text-white px-2 py-1 border border-black text-[10px] uppercase font-black hover:bg-black transition"
-                        >
-                          Hapus
-                        </button>
+                  {filteredVouchers.length === 0 ? (
+                    <tr>
+                      <td colSpan="7" className="p-4 text-center text-gray-500 uppercase font-black">
+                        Belum ada voucher diterbitkan.
                       </td>
                     </tr>
-                  ))}
+                  ) : (
+                    filteredVouchers.map((v) => (
+                      <tr key={v.id} className="border-b border-black hover:bg-gray-50">
+                        <td className="p-3 border-r-2 border-black font-mono font-black text-sm">{v.code}</td>
+                        <td className="p-3 border-r-2 border-black">
+                          {v.discount_type === 'percentage'
+                            ? `${v.discount_value}%`
+                            : `Rp ${Number(v.discount_value).toLocaleString('id-ID')}`}
+                        </td>
+                        <td className="p-3 border-r-2 border-black">Rp {Number(v.min_purchase).toLocaleString('id-ID')}</td>
+                        <td className="p-3 border-r-2 border-black">
+                          {v.used_count} / {v.max_uses}
+                        </td>
+                        <td className="p-3 border-r-2 border-black">{v.valid_until}</td>
+                        <td className="p-3 border-r-2 border-black">
+                          <span
+                            className={`px-2 py-0.5 border border-black text-[10px] uppercase font-black ${
+                              v.is_active ? 'bg-green-400 text-black' : 'bg-red-400 text-white'
+                            }`}
+                          >
+                            {v.is_active ? 'AKTIF' : 'NONAKTIF'}
+                          </span>
+                        </td>
+                        <td className="p-3 flex gap-2">
+                          <button
+                            onClick={() =>
+                              setVouchers((prev) =>
+                                prev.map((item) => (item.id === v.id ? { ...item, is_active: !item.is_active } : item))
+                              )
+                            }
+                            className="bg-yellow-300 text-black px-2 py-1 border border-black text-[10px] uppercase font-black hover:bg-black hover:text-white transition cursor-pointer"
+                          >
+                            {v.is_active ? 'Matikan' : 'Aktifkan'}
+                          </button>
+                          <button
+                            onClick={() => {
+                              if (confirm('Hapus voucher ini?')) {
+                                setVouchers((prev) => prev.filter((item) => item.id !== v.id));
+                              }
+                            }}
+                            className="bg-red-500 text-white px-2 py-1 border border-black text-[10px] uppercase font-black hover:bg-black transition cursor-pointer"
+                          >
+                            Hapus
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                  )}
                 </tbody>
               </table>
             </div>
@@ -847,13 +782,13 @@ export default function AdminDashboard() {
                   <tr key={p.id} className="border-b border-black hover:bg-gray-50">
                     <td className="p-3 border-r-2 border-black font-black">{p.name}</td>
                     <td className="p-3 border-r-2 border-black">{p.store_name}</td>
-                    <td className="p-3 border-r-2 border-black">Rp {p.price.toLocaleString('id-ID')}</td>
-                    <td className="p-3 border-r-2 border-black">{p.stock} pcs</td>
-                    <td className="p-3 border-r-2 border-black">{p.sold_count}x</td>
+                    <td className="p-3 border-r-2 border-black">Rp {Number(p.price).toLocaleString('id-ID')}</td>
+                    <td className="p-3 border-r-2 border-black font-black">{p.stock} pcs</td>
+                    <td className="p-3 border-r-2 border-black font-black bg-green-100">{p.sold_count}x</td>
                     <td className="p-3">
                       <button
                         onClick={() => handleDeleteProduct(p.id)}
-                        className="bg-red-500 text-white px-3 py-1 border border-black text-[10px] uppercase font-black hover:bg-black transition"
+                        className="bg-red-500 text-white px-3 py-1 border border-black text-[10px] uppercase font-black hover:bg-black transition cursor-pointer"
                       >
                         🗑 Take Down
                       </button>
@@ -878,44 +813,56 @@ export default function AdminDashboard() {
             </div>
           </div>
 
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs font-bold border-collapse border-2 border-black">
-              <thead>
-                <tr className="bg-black text-white border-b-2 border-black uppercase">
-                  <th className="p-3 border-r-2 border-white">ID Transaksi</th>
-                  <th className="p-3 border-r-2 border-white">Pembeli</th>
-                  <th className="p-3 border-r-2 border-white">Toko Penjual</th>
-                  <th className="p-3 border-r-2 border-white">Metode</th>
-                  <th className="p-3 border-r-2 border-white">Total</th>
-                  <th className="p-3">Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredTransactions.map((t) => (
-                  <tr key={t.id} className="border-b border-black hover:bg-gray-50">
-                    <td className="p-3 border-r-2 border-black font-mono font-black">{t.id}</td>
-                    <td className="p-3 border-r-2 border-black">@{t.buyer_name}</td>
-                    <td className="p-3 border-r-2 border-black">{t.store_name}</td>
-                    <td className="p-3 border-r-2 border-black">{t.payment_method}</td>
-                    <td className="p-3 border-r-2 border-black font-black">Rp {t.total_amount.toLocaleString('id-ID')}</td>
-                    <td className="p-3">
-                      <span
-                        className={`px-2 py-0.5 border border-black text-[10px] uppercase font-black ${
-                          t.status === 'completed'
-                            ? 'bg-green-400 text-black'
-                            : t.status === 'paid'
-                            ? 'bg-blue-300 text-black'
-                            : 'bg-yellow-300 text-black'
-                        }`}
-                      >
-                        {t.status}
-                      </span>
-                    </td>
+          {transactionsLoading && transactions.length === 0 ? (
+            <div className="p-8 text-center font-black uppercase text-gray-500">Memuat Data Transaksi Terbaru...</div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs font-bold border-collapse border-2 border-black">
+                <thead>
+                  <tr className="bg-black text-white border-b-2 border-black uppercase">
+                    <th className="p-3 border-r-2 border-white">ID Transaksi</th>
+                    <th className="p-3 border-r-2 border-white">Pembeli</th>
+                    <th className="p-3 border-r-2 border-white">Toko Penjual</th>
+                    <th className="p-3 border-r-2 border-white">Metode</th>
+                    <th className="p-3 border-r-2 border-white">Total</th>
+                    <th className="p-3">Status</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {filteredTransactions.length === 0 ? (
+                    <tr>
+                      <td colSpan="6" className="p-4 text-center text-gray-500 uppercase font-black">
+                        Belum ada riwayat transaksi.
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredTransactions.map((t) => (
+                      <tr key={t.id} className="border-b border-black hover:bg-gray-50">
+                        <td className="p-3 border-r-2 border-black font-mono font-black">{t.id}</td>
+                        <td className="p-3 border-r-2 border-black">@{t.buyer_name}</td>
+                        <td className="p-3 border-r-2 border-black">{t.store_name}</td>
+                        <td className="p-3 border-r-2 border-black">{t.payment_method}</td>
+                        <td className="p-3 border-r-2 border-black font-black">Rp {Number(t.total_amount).toLocaleString('id-ID')}</td>
+                        <td className="p-3">
+                          <span
+                            className={`px-2 py-0.5 border border-black text-[10px] uppercase font-black ${
+                              t.status === 'PAID'
+                                ? 'bg-green-400 text-black'
+                                : t.status === 'FAILED'
+                                ? 'bg-red-500 text-white'
+                                : 'bg-yellow-300 text-black'
+                            }`}
+                          >
+                            {t.status}
+                          </span>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       )}
 
