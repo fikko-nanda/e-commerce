@@ -3,15 +3,9 @@ import { useState, useEffect, useRef, useCallback, createContext, useContext } f
 
 export const ChatContext = createContext();
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api/v1';
-const WS_BASE = import.meta.env.VITE_WS_BASE_URL || 'ws://localhost:8000';
+export const useChat = () => useContext(ChatContext);
 
-function slugifyRoom(name) {
-  return String(name || 'seller')
-    .toLowerCase()
-    .replace(/[^a-z0-9_-]/g, '_')
-    .slice(0, 40) || 'seller';
-}
+const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api/v1';
 
 function loadLS(key, fallback) {
   try {
@@ -43,11 +37,6 @@ function getAuthToken() {
   return token || null;
 }
 
-function getAuthHeaders() {
-  const token = getAuthToken();
-  return token ? { Authorization: `Bearer ${token}` } : {};
-}
-
 function getCurrentUser() {
   try {
     return JSON.parse(localStorage.getItem('warmart_user') || '{}');
@@ -58,8 +47,10 @@ function getCurrentUser() {
 
 export function ChatProvider({ children }) {
   const [isOpen, setIsOpen] = useState(false);
-  const [activeSeller, setActiveSeller] = useState(null);
-  const [activeCustomer, setActiveCustomer] = useState(null);
+  const [activeSeller, setActiveSeller] = useState(null);   // nama toko (buyer view)
+  const [activeCustomer, setActiveCustomer] = useState(null); // email customer (seller view)
+  const [receiverId, setReceiverId] = useState(null);       // UUID lawan bicara
+  const [wsUrl, setWsUrl] = useState(null);
   const socketRef = useRef(null);
 
   const [conversations, setConversations] = useState(() => loadLS('warmart_conversations', {}));
@@ -68,13 +59,40 @@ export function ChatProvider({ children }) {
   useEffect(() => { saveLS('warmart_conversations', conversations); }, [conversations]);
   useEffect(() => { saveLS('warmart_customer_chats', customerChats); }, [customerChats]);
 
-  // Fetch riwayat chat dari REST API backend
+  // 1. Deteksi Store: HANYA panggil jika token valid tersedia
   useEffect(() => {
-    const headers = getAuthHeaders();
-    if (!headers.Authorization) return;
+    const token = getAuthToken();
+    if (!token) return;
 
-    fetch(`${API_BASE}/chats/`, { headers })
-      .then((r) => r.json())
+    fetch(`${API_BASE}/stores/me/`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then((r) => {
+        if (!r.ok) throw new Error('Unauthorized');
+        return r.json();
+      })
+      .then((d) => {
+        const name = d?.store?.store_name;
+        if (name) localStorage.setItem('myStoreName', name);
+        else localStorage.removeItem('myStoreName');
+      })
+      .catch(() => {
+        // Abaikan error jika token kadaluarsa/unauthorized
+      });
+  }, []);
+
+  // 2. Muat riwayat chat: HANYA panggil jika token valid tersedia
+  useEffect(() => {
+    const token = getAuthToken();
+    if (!token) return;
+
+    fetch(`${API_BASE}/chats/`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then((r) => {
+        if (!r.ok) throw new Error('Unauthorized');
+        return r.json();
+      })
       .then((res) => {
         const list = res?.data || (Array.isArray(res) ? res : []);
         if (!Array.isArray(list) || list.length === 0) return;
@@ -82,6 +100,7 @@ export function ChatProvider({ children }) {
         const u = getCurrentUser();
         const meId = String(u.id || '');
         const meEmail = String(u.email || '');
+        const myStore = localStorage.getItem('myStoreName');
 
         const convs = {};
         const custs = {};
@@ -92,72 +111,128 @@ export function ChatProvider({ children }) {
           const otherId = mine ? c.receiver : c.sender;
           const time = new Date(c.timestamp || Date.now()).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
 
-          const storeTarget = mine ? (c.receiver_email || 'Toko') : (c.sender_email || 'Toko');
-
-          if (mine) {
-            const key = activeSeller || storeTarget;
-            if (!convs[key]) convs[key] = [];
-            convs[key].push({ id: c.id || Date.now(), sender: 'user', text: c.message, time });
-          } else {
+          if (myStore) {
             const key = otherEmail || `Customer ${String(otherId || '').slice(0, 8)}`;
             if (!custs[key]) custs[key] = [];
-            custs[key].push({ id: c.id || Date.now(), sender: 'seller', text: c.message, time });
+            custs[key].push({
+              id: c.id || Date.now(),
+              sender: mine ? 'seller' : 'user',
+              text: c.message,
+              time,
+              sender_id: c.sender,
+              sender_email: c.sender_email,
+            });
+          } else {
+            const key = otherEmail || 'Toko';
+            if (!convs[key]) convs[key] = [];
+            convs[key].push({
+              id: c.id || Date.now(),
+              sender: mine ? 'user' : 'seller',
+              text: c.message,
+              time,
+              sender_id: c.sender,
+            });
           }
         });
 
-        if (Object.keys(convs).length) setConversations((prev) => ({ ...convs, ...prev }));
         if (Object.keys(custs).length) setCustomerChats((prev) => ({ ...custs, ...prev }));
+        if (Object.keys(convs).length) setConversations((prev) => ({ ...convs, ...prev }));
       })
-      .catch(() => {});
+      .catch(() => {
+        // Abaikan error jika token kadaluarsa/unauthorized
+      });
   }, [activeSeller]);
 
-  const openChatWithSeller = useCallback((sellerName, productInfo = null) => {
+  // Buyer membuka chat dengan toko tertentu
+  const openChatWithSeller = useCallback(async (sellerName, productInfo = null) => {
     if (!sellerName) return;
-    localStorage.setItem('activeSellerId', sellerName);
+    setActiveCustomer(null);
     setActiveSeller(sellerName);
     setIsOpen(true);
 
-    setConversations((prev) => {
-      const currentMsgs = prev[sellerName] || [];
-      if (productInfo?.name) {
-        const productText = `Halo ${sellerName}, apakah produk "${productInfo.name}" masih ready stok?`;
-        const exists = currentMsgs.some((m) => m.text === productText);
-        if (!exists) {
-          return {
-            ...prev,
-            [sellerName]: [
-              ...currentMsgs,
-              { id: `msg-prod-${Date.now()}`, sender: 'user', text: productText, time: 'Baru saja' },
-            ],
-          };
-        }
-      }
-      return { ...prev, [sellerName]: currentMsgs };
-    });
+    if (productInfo?.name) {
+      const productText = `Halo ${sellerName}, apakah produk "${productInfo.name}" masih ready stok?`;
+      setConversations((prev) => {
+        const currentMsgs = prev[sellerName] || [];
+        if (currentMsgs.some((m) => m.text === productText)) return prev;
+        return {
+          ...prev,
+          [sellerName]: [...currentMsgs, { id: `msg-prod-${Date.now()}`, sender: 'user', text: productText, time: 'Baru saja' }],
+        };
+      });
+    }
+
+    const token = getAuthToken();
+    if (!token) return;
+    const headers = { Authorization: `Bearer ${token}` };
+
+    try {
+      const storeRes = await fetch(`${API_BASE}/stores/user-by-name/?store_name=${encodeURIComponent(sellerName)}`, { headers });
+      if (!storeRes.ok) return;
+      const storeData = await storeRes.json();
+      const sellerUserId = storeData.user_id;
+      if (!sellerUserId) return;
+
+      setReceiverId(sellerUserId);
+
+      const roomRes = await fetch(`${API_BASE}/chats/room-name/?user_id=${sellerUserId}`, { headers });
+      if (!roomRes.ok) return;
+      const roomData = await roomRes.json();
+      if (roomData.ws_url) setWsUrl(roomData.ws_url);
+    } catch {
+      // Abaikan error jaringan
+    }
   }, []);
 
-  const openCustomerChat = useCallback((customerKey) => {
+  // Seller membuka thread customer tertentu
+  const openCustomerChat = useCallback(async (customerKey) => {
+    setActiveSeller(null);
     setActiveCustomer(customerKey);
     setIsOpen(true);
-  }, []);
 
-  // Hubungkan WebSocket secara aman ke room store
-  useEffect(() => {
-    const targetRoom = activeSeller || localStorage.getItem('activeSellerId') || localStorage.getItem('myStoreName');
-    if (!targetRoom) return;
+    const custMsgs = customerChats[customerKey] || [];
+    const custMsg = custMsgs.find((m) => m.sender !== 'seller' && m.sender_id);
+    const customerId = custMsg?.sender_id;
+    if (!customerId) return;
 
-    const roomSlug = slugifyRoom(targetRoom);
-    const roomName = roomSlug.startsWith('store_') ? roomSlug : `store_${roomSlug}`;
+    setReceiverId(customerId);
+
     const token = getAuthToken();
-    const wsUrl = `${WS_BASE}/ws/chat/${roomName}/${token ? `?token=${encodeURIComponent(token)}` : ''}`;
+    if (!token) return;
+    const headers = { Authorization: `Bearer ${token}` };
 
-    let ws;
     try {
-      ws = new WebSocket(wsUrl);
+      const roomRes = await fetch(`${API_BASE}/chats/room-name/?user_id=${customerId}`, { headers });
+      if (!roomRes.ok) return;
+      const roomData = await roomRes.json();
+      if (roomData.ws_url) setWsUrl(roomData.ws_url);
     } catch {
+      // Abaikan error jaringan
+    }
+  }, [customerChats]);
+
+  // Koneksi WebSocket
+  useEffect(() => {
+    if (!isOpen) {
+      if (socketRef.current) {
+        try { socketRef.current.close(); } catch { /* empty */ }
+        socketRef.current = null;
+      }
+      if (window.chatSocket) delete window.chatSocket;
       return;
     }
 
+    if (!wsUrl) return;
+
+    const token = getAuthToken();
+    const authedUrl = token ? `${wsUrl}${wsUrl.includes('?') ? '&' : '?'}token=${encodeURIComponent(token)}` : wsUrl;
+
+    let ws;
+    try {
+      ws = new WebSocket(authedUrl);
+    } catch {
+      return;
+    }
     socketRef.current = ws;
     window.chatSocket = ws;
 
@@ -169,115 +244,120 @@ export function ChatProvider({ children }) {
         const u = getCurrentUser();
         const meId = String(u.id || '');
         const meEmail = String(u.email || '');
-
         const isSelf = data.sender_id && (String(data.sender_id) === meId || String(data.sender_email || '') === meEmail);
         if (isSelf) return;
 
         const time = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+        const myStore = localStorage.getItem('myStoreName');
 
-        setConversations((prev) => ({
-          ...prev,
-          [targetRoom]: [
-            ...(prev[targetRoom] || []),
-            {
-              id: `msg-ws-${Date.now()}-${Math.random()}`,
-              sender: 'seller',
-              text: data.message,
-              time,
-            },
-          ],
-        }));
-      } catch {
-        // Safe parse failure
-      }
-    };
-
-    return () => {
-      try { 
-        if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) {
-          ws.close();
+        if (myStore && activeCustomer) {
+          const customerKey = data.sender_email || `Customer ${String(data.sender_id || '').slice(0, 8)}`;
+          setCustomerChats((prev) => ({
+            ...prev,
+            [customerKey]: [
+              ...(prev[customerKey] || []),
+              {
+                id: `msg-ws-${Date.now()}-${Math.random()}`,
+                sender: 'user',
+                text: data.message,
+                time,
+                sender_id: data.sender_id,
+                sender_email: data.sender_email,
+              },
+            ],
+          }));
+        } else if (activeSeller) {
+          setConversations((prev) => ({
+            ...prev,
+            [activeSeller]: [
+              ...(prev[activeSeller] || []),
+              { id: `msg-ws-${Date.now()}-${Math.random()}`, sender: 'seller', text: data.message, time },
+            ],
+          }));
         }
       } catch {
-        // Safe close error
+        // Safe parse
       }
-      if (window.chatSocket === ws) delete window.chatSocket;
-      socketRef.current = null;
     };
-  }, [activeSeller, activeCustomer]);
 
-  const pushToBackend = (payload) => {
-    const token = getAuthToken();
-    if (!token) return;
+    ws.onerror = () => {};
 
-    fetch(`${API_BASE}/chats/send/`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify(payload),
-    }).catch(() => {});
-  };
+    return () => {
+      try { ws.close(); } catch { /* empty */ }
+      if (window.chatSocket === ws) delete window.chatSocket;
+      if (socketRef.current === ws) socketRef.current = null;
+    };
+  }, [wsUrl, isOpen, activeSeller, activeCustomer]);
 
-  const sendMessage = (text) => {
+  // Kirim pesan
+  const sendMessage = useCallback((text) => {
     if (!text.trim()) return;
-
-    const targetSeller = activeSeller || localStorage.getItem('activeSellerId');
-    if (!targetSeller) return;
-
-    const u = getCurrentUser();
-    const time = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
     const trimmedText = text.trim();
+    const targetSeller = activeSeller;
+    const targetCustomer = activeCustomer;
 
-    setConversations((prev) => ({
-      ...prev,
-      [targetSeller]: [
-        ...(prev[targetSeller] || []),
-        {
-          id: `msg-user-${Date.now()}`,
-          sender: 'user',
-          text: trimmedText,
-          time,
-        },
-      ],
-    }));
+    const time = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
 
-    try {
-      const ws = socketRef.current || window.chatSocket;
-      const wsPayload = {
-        message: trimmedText,
-        sender_id: u.id || 'anon',
-        sender_email: u.email || '',
-        receiver: targetSeller,
-      };
-      if (ws && ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify(wsPayload));
+    if (targetCustomer && !targetSeller) {
+      setCustomerChats((prev) => ({
+        ...prev,
+        [targetCustomer]: [
+          ...(prev[targetCustomer] || []),
+          { id: `msg-seller-${Date.now()}`, sender: 'seller', text: trimmedText, time },
+        ],
+      }));
+
+      try {
+        const ws = socketRef.current || window.chatSocket;
+        const payload = { message: trimmedText, receiver_id: receiverId };
+        if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(payload));
+      } catch { /* empty */ }
+
+      const token = getAuthToken();
+      if (token && receiverId) {
+        fetch(`${API_BASE}/chats/send/`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ message: trimmedText, receiver_id: receiverId }),
+        }).catch(() => {});
       }
-    } catch {
-      // Safe send error
+      return;
     }
 
-    pushToBackend({
-      message: trimmedText,
-      receiver: targetSeller,
-      receiver_id: targetSeller,
-      store_name: targetSeller,
-    });
-  };
+    if (targetSeller) {
+      setConversations((prev) => ({
+        ...prev,
+        [targetSeller]: [
+          ...(prev[targetSeller] || []),
+          { id: `msg-user-${Date.now()}`, sender: 'user', text: trimmedText, time },
+        ],
+      }));
+
+      try {
+        const ws = socketRef.current || window.chatSocket;
+        const payload = { message: trimmedText, receiver_id: receiverId };
+        if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(payload));
+      } catch { /* empty */ }
+
+      const token = getAuthToken();
+      if (token && receiverId) {
+        fetch(`${API_BASE}/chats/send/`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ message: trimmedText, receiver_id: receiverId }),
+        }).catch(() => {});
+      }
+    }
+  }, [activeSeller, activeCustomer, receiverId]);
 
   return (
     <ChatContext.Provider
       value={{
-        isOpen,
-        setIsOpen,
-        activeSeller,
-        setActiveSeller,
-        activeCustomer,
-        setActiveCustomer,
-        conversations,
-        customerChats,
-        openChatWithSeller,
-        openCustomerChat,
+        isOpen, setIsOpen,
+        activeSeller, setActiveSeller,
+        activeCustomer, setActiveCustomer,
+        conversations, customerChats,
+        openChatWithSeller, openCustomerChat,
         sendMessage,
       }}
     >
@@ -285,5 +365,3 @@ export function ChatProvider({ children }) {
     </ChatContext.Provider>
   );
 }
-
-export const useChat = () => useContext(ChatContext);

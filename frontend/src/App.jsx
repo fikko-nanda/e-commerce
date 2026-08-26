@@ -21,12 +21,8 @@ import RegisterSeller from './pages/seller/RegisterSeller';
 
 import UserDashboard from './pages/user/UserDashboard';
 import UserProfile from './pages/user/UserProfile';
-<<<<<<< HEAD
 import OrderHistory from './pages/user/OrderHistory';
-
-=======
 import UserChat from './pages/user/UserChat';
->>>>>>> fitur-chat-lokal
 import AdminDashboard from './pages/admin/AdminDashboard';
 
 function AppContent() {
@@ -51,6 +47,7 @@ function AppContent() {
             {/* USER ROUTES */}
             <Route path="/profile" element={<UserProfile />} />
             <Route path="/user/dashboard" element={<UserDashboard />} />
+            <Route path="/user/chat" element={<UserChat />} />
             <Route
               path="/user/orders"
               element={
@@ -73,42 +70,7 @@ function AppContent() {
 
             {/* ADMIN ROUTES */}
             <Route
-<<<<<<< HEAD
               path="/admin/*"
-=======
-              path="/profile"
-              element={<UserProfile />}
-            />
-
-            <Route
-              path="/user/dashboard"
-              element={<UserDashboard />}
-            />
-
-            <Route
-              path="/user/chat"
-              element={<UserChat />}
-            />
-
-            {/* =========================
-                SELLER ROUTES
-            ========================= */}
-            <Route
-              path="/seller/register"
-              element={<RegisterSeller />}
-            />
-
-            <Route
-              path="/seller"
-              element={<SellerDashboard />}
-            />
-
-            {/* =========================
-                ADMIN ROUTES
-            ========================= */}
-            <Route
-              path="/admin"
->>>>>>> fitur-chat-lokal
               element={
                 <ProtectedRoute requiredRole="admin">
                   <AdminDashboard />

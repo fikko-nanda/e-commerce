@@ -11,23 +11,32 @@ export default function UserProfile() {
   const { addToCart } = useContext(CartContext) || {};
   const { showToast } = useToast() || {};
 
-  const [activeTab, setActiveTab] = useState('profile'); // 'profile' | 'wishlist'
-  const [wishlist, setWishlist] = useState([]);
+  const [activeTab, setActiveTab] = useState('profile');
 
-  // State Mode Edit & Form Profil
-  const [isEditing, setIsEditing] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [formData, setFormData] = useState({
-    first_name: '',
-    last_name: '',
-    email: '',
-    phone: '',
-    bio: '',
+  // 1. Inisialisasi Wishlist via Lazy State (Bebas dari Warning useEffect)
+  const [wishlist, setWishlist] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem('warmart_wishlist') || '[]');
+    } catch {
+      return [];
+    }
   });
 
-  // Sinkronisasi data form dengan data user login
+  const [isEditing, setIsEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  // 2. Inisialisasi Form Data langsung dari object user
+  const [formData, setFormData] = useState({
+    first_name: user?.first_name || '',
+    last_name: user?.last_name || '',
+    email: user?.email || '',
+    phone: user?.phone || user?.phone_number || '',
+    bio: user?.bio || '',
+  });
+
+  // 3. Update Form Data jika user berganti/di-fetch ulang (Hanya saat tidak dalam mode edit)
   useEffect(() => {
-    if (user) {
+    if (user && !isEditing) {
       setFormData({
         first_name: user.first_name || '',
         last_name: user.last_name || '',
@@ -36,16 +45,7 @@ export default function UserProfile() {
         bio: user.bio || '',
       });
     }
-  }, [user]);
-
-  useEffect(() => {
-    loadWishlist();
-  }, []);
-
-  const loadWishlist = () => {
-    const saved = JSON.parse(localStorage.getItem('warmart_wishlist') || '[]');
-    setWishlist(saved);
-  };
+  }, [user?.first_name, user?.last_name, user?.email, user?.phone, user?.phone_number, user?.bio, isEditing]);
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -59,25 +59,24 @@ export default function UserProfile() {
     try {
       let updatedUserData = { ...user, ...formData };
 
-      // Coba kirim update ke backend API
       try {
         const res = await userService.updateProfile(formData);
-        if (res.data?.data) {
+        if (res?.data?.data) {
           updatedUserData = res.data.data;
-        } else if (res.data) {
+        } else if (res?.data) {
           updatedUserData = { ...user, ...res.data };
         }
       } catch (err) {
         console.warn('Gagal sync ke API, memperbarui profil secara lokal:', err);
       }
 
-      // Update state global AuthContext & LocalStorage
       if (setUser) setUser(updatedUserData);
       localStorage.setItem('user', JSON.stringify(updatedUserData));
 
       if (showToast) showToast('Profil berhasil diperbarui! 🎉', 'success');
       setIsEditing(false);
     } catch (err) {
+      console.error(err);
       if (showToast) showToast('Gagal memperbarui profil.', 'error');
     } finally {
       setSaving(false);
@@ -85,7 +84,6 @@ export default function UserProfile() {
   };
 
   const handleCancelEdit = () => {
-    // Reset form ke data asal
     setFormData({
       first_name: user?.first_name || '',
       last_name: user?.last_name || '',
@@ -188,7 +186,6 @@ export default function UserProfile() {
             </div>
 
             <form onSubmit={handleSaveProfile} className="space-y-4">
-              {/* Username (Fixed) */}
               <div>
                 <label className="block font-black text-xs uppercase mb-1 text-gray-600">Username (Tidak dapat diubah)</label>
                 <input
@@ -199,7 +196,6 @@ export default function UserProfile() {
                 />
               </div>
 
-              {/* Nama Depan & Belakang */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block font-black text-xs uppercase mb-1">Nama Depan</label>
@@ -231,7 +227,6 @@ export default function UserProfile() {
                 </div>
               </div>
 
-              {/* Email & No Telepon */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block font-black text-xs uppercase mb-1">Email</label>
@@ -263,7 +258,6 @@ export default function UserProfile() {
                 </div>
               </div>
 
-              {/* Bio / Catatan Profil */}
               <div>
                 <label className="block font-black text-xs uppercase mb-1">Bio / Catatan Alamat Singkat</label>
                 <textarea
@@ -279,7 +273,6 @@ export default function UserProfile() {
                 />
               </div>
 
-              {/* Tombol Simpan / Batal (Saat Mode Edit) */}
               {isEditing ? (
                 <div className="flex gap-3 pt-4 border-t-2 border-black">
                   <button

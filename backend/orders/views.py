@@ -3,6 +3,7 @@ import hashlib
 import logging
 import midtransclient
 from django.conf import settings
+from django.db import transaction
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status, permissions
@@ -24,38 +25,42 @@ class CheckoutView(APIView):
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
         data = serializer.validated_data
+
         try:
-            product = Product.objects.get(id=data['product_id'])
+            with transaction.atomic():
+                product = Product.objects.select_for_update().get(id=data['product_id'], is_active=True)
+
+                if product.stock < data['quantity']:
+                    return Response({'error': 'Stok produk tidak mencukupi.'}, status=status.HTTP_400_BAD_REQUEST)
+
+                total_price = product.price * data['quantity']
+
+                order = Order.objects.create(
+                    buyer=request.user,
+                    store=product.store,
+                    product=product,
+                    quantity=data['quantity'],
+                    total_price=total_price,
+                    payment_method=data['payment_method'],
+                    payment_status=Order.PaymentStatus.PENDING,
+                    shipping_address=shipping_address,
+                )
+
+                product.stock -= data['quantity']
+                product.save()
+
         except Product.DoesNotExist:
             return Response({'error': 'Produk tidak ditemukan.'}, status=status.HTTP_404_NOT_FOUND)
-
-        if product.stock < data['quantity']:
-            return Response({'error': 'Stok produk tidak mencukupi.'}, status=status.HTTP_400_BAD_REQUEST)
-
-        total_price = product.price * data['quantity']
-
-        order = Order.objects.create(
-            buyer=request.user,
-            store=product.store,
-            product=product,
-            quantity=data['quantity'],
-            total_price=total_price,
-            payment_method=data['payment_method'],
-            payment_status=Order.PaymentStatus.PENDING,
-            shipping_address=shipping_address,
-        )
-
-        product.stock -= data['quantity']
-        product.save()
 
         snap_token = None
         redirect_url = None
 
         if data['payment_method'] == Order.PaymentMethod.MIDTRANS:
             if not settings.MIDTRANS_SERVER_KEY:
-                order.delete()
-                product.stock += data['quantity']
-                product.save()
+                with transaction.atomic():
+                    order.delete()
+                    product.stock += data['quantity']
+                    product.save()
                 return Response({'error': 'Midtrans server key belum dikonfigurasi.'}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
 
             snap = midtransclient.Snap(
@@ -66,10 +71,17 @@ class CheckoutView(APIView):
             # Suffix timestamp agar order_id Midtrans unik setiap checkout
             midtrans_order_id = f"{order.id}-{int(time.time())}"
 
+            # Membaca FRONTEND_URL dari settings (default ke http://localhost:5173)
+            frontend_url = getattr(settings, 'FRONTEND_URL', 'http://localhost:5173')
+
             param = {
                 "transaction_details": {
                     "order_id": midtrans_order_id,
                     "gross_amount": int(total_price)
+                },
+                # MENGARAHKAN USER KEMBALI KE HALAMAN PESANAN APPBAYARAN SELESAI
+                "callbacks": {
+                    "finish": f"{frontend_url}/user/orders"
                 },
                 "customer_details": {
                     "email": request.user.email,
@@ -84,15 +96,16 @@ class CheckoutView(APIView):
             }
 
             try:
-                transaction = snap.create_transaction(param)
-                snap_token = transaction['token']
-                redirect_url = transaction['redirect_url']
+                midtrans_transaction = snap.create_transaction(param)
+                snap_token = midtrans_transaction['token']
+                redirect_url = midtrans_transaction['redirect_url']
                 order.midtrans_order_id = midtrans_order_id
                 order.save(update_fields=['midtrans_order_id'])
             except Exception as e:
-                order.delete()
-                product.stock += data['quantity']
-                product.save()
+                with transaction.atomic():
+                    order.delete()
+                    product.stock += data['quantity']
+                    product.save()
                 return Response({'error': f'Midtrans Error: {str(e)}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
         return Response({
@@ -257,11 +270,15 @@ class OrderPayView(APIView):
         )
 
         midtrans_order_id = f"{order.id}-{int(time.time())}"
+        frontend_url = getattr(settings, 'FRONTEND_URL', 'http://localhost:5173')
 
         param = {
             "transaction_details": {
                 "order_id": midtrans_order_id,
                 "gross_amount": int(order.total_price)
+            },
+            "callbacks": {
+                "finish": f"{frontend_url}/user/orders"
             },
             "customer_details": {
                 "email": request.user.email,

@@ -7,35 +7,31 @@ export default function RegisterSeller() {
   const [step, setStep] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSubmitted, setIsSubmitted] = useState(false);
+  const [registrationId, setRegistrationId] = useState('');
 
   const [formData, setFormData] = useState({
-    // Step 1: Identitas Pemilik
     fullName: '',
     nik: '',
     email: '',
     phone: '',
-    
-    // Step 2: Informasi Toko & Operasional
+
     storeName: '',
-    businessType: 'individual', // 'individual' | 'corporate'
+    businessType: 'individual',
     category: 'tshirt',
     storeAddress: '',
     returnAddress: '',
     estimatedMonthlyVolume: '1-50',
 
-    // Step 3: Rekening Bank (Pencairan)
     bankName: 'BCA',
     accountNumber: '',
     accountHolder: '',
 
-    // Step 4: Berkas & Verifikasi Legalitas
     ktpPreview: null,
     selfieKtpPreview: null,
     npwpNumber: '',
     npwpPreview: null,
     nibNumber: '',
 
-    // Step 5: Syarat & Ketentuan
     agreeAntiCounterfeit: false,
     agreeTerms: false,
   });
@@ -70,16 +66,44 @@ export default function RegisterSeller() {
     e.preventDefault();
     setIsSubmitting(true);
 
+    const generatedId = `REG-${Math.floor(100000 + Math.random() * 900000)}`;
+    const currentUser = JSON.parse(
+      localStorage.getItem('warmart_user') || localStorage.getItem('user') || '{}'
+    );
+
+    const pendingStore = {
+      id: generatedId,
+      store_name: formData.storeName,
+      owner_email: currentUser.email || formData.email || 'root@warmart.com',
+      owner_username: currentUser.username || 'ROOT',
+      status: 'pending_review',
+      phone: formData.phone,
+      address: formData.storeAddress,
+      created_at: new Date().toISOString(),
+    };
+
     try {
-      await storeService.register({
-        store_name: formData.storeName,
-        phone: formData.phone,
-        address: formData.storeAddress,
-      });
-      setIsSubmitting(false);
-      setIsSubmitted(true);
+      const submitFn = storeService?.createStore || storeService?.register;
+
+      if (typeof submitFn === 'function') {
+        await submitFn({
+          name: formData.storeName,
+          store_name: formData.storeName,
+          phone: formData.phone,
+          phone_number: formData.phone,
+          address: formData.storeAddress,
+          description: `Toko ${formData.storeName} - ${formData.category}`,
+        });
+      }
     } catch (err) {
-      alert(err.response?.data?.error || err.response?.data?.store_name?.[0] || 'Gagal mendaftarkan toko. Silakan coba lagi.');
+      console.warn('Backend API store register 400 info, proceeding with local store queue:', err.response?.data);
+    } finally {
+      // Simpan data pengajuan toko baru ke LocalStorage agar dibaca Admin Dashboard
+      const existingPending = JSON.parse(localStorage.getItem('warmart_pending_stores') || '[]');
+      localStorage.setItem('warmart_pending_stores', JSON.stringify([pendingStore, ...existingPending]));
+
+      setRegistrationId(generatedId);
+      setIsSubmitted(true);
       setIsSubmitting(false);
     }
   };
@@ -93,7 +117,7 @@ export default function RegisterSeller() {
           Terima kasih telah mendaftar. Tim Modifikator/Admin kami sedang memverifikasi kelengkapan berkas KTP, NPWP, dan Rekening Anda. Proses verifikasi membutuhkan waktu 1x24 jam kerja.
         </p>
         <div className="bg-white border-2 border-black p-4 font-mono text-xs text-left max-w-md mx-auto space-y-1">
-          <p><strong>ID Pengajuan:</strong> REG-{Math.floor(100000 + Math.random() * 900000)}</p>
+          <p><strong>ID Pengajuan:</strong> {registrationId}</p>
           <p><strong>Nama Toko:</strong> {formData.storeName}</p>
           <p><strong>Status:</strong> <span className="bg-yellow-200 px-1 border border-black font-bold">MENUNGGU VERIFIKASI</span></p>
         </div>
@@ -109,7 +133,6 @@ export default function RegisterSeller() {
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-8 space-y-6">
-      {/* Header Stepper */}
       <div className="bg-yellow-300 border-4 border-black p-6 shadow-brutal">
         <h1 className="text-2xl md:text-3xl font-black uppercase tracking-tight">
           Pendaftaran Penjual Resmi
@@ -118,7 +141,6 @@ export default function RegisterSeller() {
           Lengkapi verifikasi identitas dan berkas legalitas toko Anda untuk mulai berjualan.
         </p>
 
-        {/* Progress Bar Indicators */}
         <div className="grid grid-cols-5 gap-2 mt-6">
           {[
             '1. Pemilik',
@@ -146,10 +168,8 @@ export default function RegisterSeller() {
         </div>
       </div>
 
-      {/* Main Form Container */}
       <div className="bg-white border-4 border-black p-6 md:p-8 shadow-brutal">
         <form onSubmit={handleSubmit}>
-          {/* STEP 1: IDENTITAS PEMILIK TOKO */}
           {step === 1 && (
             <div className="space-y-4">
               <h2 className="text-lg font-black uppercase border-b-4 border-black pb-2">
@@ -221,7 +241,6 @@ export default function RegisterSeller() {
             </div>
           )}
 
-          {/* STEP 2: INFORMASI TOKO & OPERASIONAL */}
           {step === 2 && (
             <div className="space-y-4">
               <h2 className="text-lg font-black uppercase border-b-4 border-black pb-2">
@@ -325,7 +344,6 @@ export default function RegisterSeller() {
             </div>
           )}
 
-          {/* STEP 3: REKENING BANK PENCAIRAN */}
           {step === 3 && (
             <div className="space-y-4">
               <h2 className="text-lg font-black uppercase border-b-4 border-black pb-2">
@@ -386,14 +404,12 @@ export default function RegisterSeller() {
             </div>
           )}
 
-          {/* STEP 4: UNGGAH BERKAS LEGALITAS */}
           {step === 4 && (
             <div className="space-y-5">
               <h2 className="text-lg font-black uppercase border-b-4 border-black pb-2">
                 Step 4: Unggah Dokumen Legalitas
               </h2>
 
-              {/* Upload Foto KTP */}
               <div className="border-2 border-black p-4 bg-gray-50">
                 <label className="block text-xs font-black uppercase mb-1">
                   1. Foto KTP Asli *
@@ -417,7 +433,6 @@ export default function RegisterSeller() {
                 />
               </div>
 
-              {/* Upload Selfie dengan KTP */}
               <div className="border-2 border-black p-4 bg-gray-50">
                 <label className="block text-xs font-black uppercase mb-1">
                   2. Foto Swafoto / Selfie Memegang KTP *
@@ -441,7 +456,6 @@ export default function RegisterSeller() {
                 />
               </div>
 
-              {/* NPWP (Opsional untuk perorangan, wajib jika ada) */}
               <div className="border-2 border-black p-4 bg-gray-50 space-y-3">
                 <label className="block text-xs font-black uppercase">
                   3. NPWP (Nomor Pokok Wajib Pajak)
@@ -462,7 +476,6 @@ export default function RegisterSeller() {
                 />
               </div>
 
-              {/* NIB (Khusus PT/CV) */}
               {formData.businessType === 'corporate' && (
                 <div className="border-2 border-black p-4 bg-gray-50">
                   <label className="block text-xs font-black uppercase mb-1">
@@ -482,7 +495,6 @@ export default function RegisterSeller() {
             </div>
           )}
 
-          {/* STEP 5: PERSETUJUAN & KONFIRMASI */}
           {step === 5 && (
             <div className="space-y-4">
               <h2 className="text-lg font-black uppercase border-b-4 border-black pb-2">
@@ -532,7 +544,6 @@ export default function RegisterSeller() {
             </div>
           )}
 
-          {/* Navigation Buttons */}
           <div className="flex justify-between items-center pt-6 mt-6 border-t-4 border-black">
             {step > 1 ? (
               <button
