@@ -162,8 +162,8 @@ const DUMMY_VOUCHERS = [
   {
     id: 'v-1',
     code: 'WARMART2026',
-    discount_type: 'percentage', // percentage | fixed
-    discount_value: 20, // 20%
+    discount_type: 'percentage',
+    discount_value: 20,
     min_purchase: 100000,
     max_uses: 100,
     used_count: 42,
@@ -174,7 +174,7 @@ const DUMMY_VOUCHERS = [
     id: 'v-2',
     code: 'GAJIANHEMAT',
     discount_type: 'fixed',
-    discount_value: 50000, // Rp 50.000
+    discount_value: 50000,
     min_purchase: 250000,
     max_uses: 50,
     used_count: 50,
@@ -208,23 +208,23 @@ export default function AdminDashboard() {
   const [activeTab, setActiveTab] = useState('stores');
   const [searchQuery, setSearchQuery] = useState('');
 
-  // Stores
+  // Stores State
   const [stores, setStores] = useState(DUMMY_STORES);
   const [storesLoading, setStoresLoading] = useState(false);
   const [storeActionId, setStoreActionId] = useState(null);
   const [storeStatusFilter, setStoreStatusFilter] = useState('all');
 
-  // Users
+  // Users State
   const [users, setUsers] = useState(DUMMY_USERS);
   const [usersLoading, setUsersLoading] = useState(false);
   const [userActionId, setUserActionId] = useState(null);
   const [userRoleFilter, setUserRoleFilter] = useState('all');
 
-  // Products & Transactions
+  // Products & Transactions State
   const [products, setProducts] = useState(DUMMY_PRODUCTS);
   const [transactions] = useState(DUMMY_TRANSACTIONS);
 
-  // Vouchers
+  // Vouchers State
   const [vouchers, setVouchers] = useState(DUMMY_VOUCHERS);
   const [newVoucher, setNewVoucher] = useState({
     code: '',
@@ -235,23 +235,59 @@ export default function AdminDashboard() {
     valid_until: '',
   });
 
-  // Reviews
+  // Reviews State
   const [reviews, setReviews] = useState(DUMMY_REVIEWS);
   const [reviewsLoading, setReviewsLoading] = useState(false);
   const [deletingId, setDeletingId] = useState(null);
   const [filterRating, setFilterRating] = useState('all');
 
-  // ---- Safe Fetch functions ----
+  // ---- Fetch Stores Dengan Membaca Status Permanen LocalStorage ----
   const fetchStores = async () => {
     setStoresLoading(true);
     try {
+      let fetchedList = [];
       if (storeService && typeof storeService.adminGetAll === 'function') {
         const res = await storeService.adminGetAll();
-        const list = normalizeList(res);
-        if (list.length > 0) setStores(list);
+        fetchedList = normalizeList(res);
       }
+
+      let pendingLocal = [];
+      let savedStatuses = {};
+      try {
+        pendingLocal = JSON.parse(localStorage.getItem('warmart_pending_stores') || '[]');
+        savedStatuses = JSON.parse(localStorage.getItem('warmart_store_statuses') || '{}');
+      } catch (e) {
+        console.error(e);
+      }
+
+      const combinedMap = new Map();
+
+      // 1. Masukkan pendaftaran toko pending lokal
+      pendingLocal.forEach((s) => {
+        if (s && s.store_name) {
+          const nameKey = s.store_name.toLowerCase();
+          combinedMap.set(nameKey, {
+            ...s,
+            status: savedStatuses[nameKey] || s.status || 'pending_review',
+          });
+        }
+      });
+
+      // 2. Masukkan toko dari backend
+      fetchedList.forEach((s) => {
+        const nameKey = (s.store_name || s.name || '').toLowerCase();
+        if (nameKey) {
+          const currentStatus = savedStatuses[nameKey] || s.status || 'active';
+          if (!combinedMap.has(nameKey)) {
+            combinedMap.set(nameKey, { ...s, status: currentStatus });
+          }
+        }
+      });
+
+      const finalStores = Array.from(combinedMap.values());
+      setStores(finalStores.length > 0 ? finalStores : DUMMY_STORES);
     } catch (err) {
-      console.warn('Gagal memuat API Stores (Gunakan Data Dummy):', err?.message || err);
+      console.warn('Gagal memuat API Stores, menggunakan fallback local:', err);
       setStores(DUMMY_STORES);
     } finally {
       setStoresLoading(false);
@@ -283,7 +319,7 @@ export default function AdminDashboard() {
         if (list.length > 0) setReviews(list);
       }
     } catch (err) {
-      console.warn('Gagal memuat API Reviews (Gunakan Data Dummy):', err?.message || err);
+      console.warn('Gagal memuat API Reviews:', err);
       setReviews(DUMMY_REVIEWS);
     } finally {
       setReviewsLoading(false);
@@ -299,7 +335,9 @@ export default function AdminDashboard() {
       if (activeTab === 'reviews') await fetchReviews();
     };
     loadData();
-    return () => { isMounted = false; };
+    return () => {
+      isMounted = false;
+    };
   }, [activeTab]);
 
   const handleTabSwitch = (tab) => {
@@ -307,34 +345,47 @@ export default function AdminDashboard() {
     setSearchQuery('');
   };
 
-  // ---- Actions: Stores ----
+  // ---- Aksi Suspend / Aktifkan Toko Permanen ----
   const handleStoreStatus = async (store, newStatus) => {
-    const verb = {
-      active: 'verifikasi/aktifkan',
-      rejected: 'tolak',
-      suspended: 'suspend',
-    }[newStatus] || newStatus;
-    
+    const verb =
+      {
+        active: 'verifikasi/aktifkan',
+        rejected: 'tolak',
+        suspended: 'suspend',
+      }[newStatus] || newStatus;
+
     if (!confirm(`Yakin ingin ${verb} toko "${store.store_name}"?`)) return;
 
     setStoreActionId(store.id);
+
+    // 1. Update UI secara langsung
+    setStores((prev) =>
+      prev.map((s) => (s.id === store.id ? { ...s, status: newStatus } : s))
+    );
+
+    // 2. Simpan status ke LocalStorage secara permanen berdasarkan NAMA TOKO
+    try {
+      const storeKey = store.store_name.toLowerCase();
+      const savedStatuses = JSON.parse(localStorage.getItem('warmart_store_statuses') || '{}');
+      savedStatuses[storeKey] = newStatus;
+      localStorage.setItem('warmart_store_statuses', JSON.stringify(savedStatuses));
+    } catch (e) {
+      console.error(e);
+    }
+
+    // 3. Panggil service secara aman
     try {
       if (storeService && typeof storeService.adminUpdateStatus === 'function') {
         await storeService.adminUpdateStatus(store.id, newStatus);
-        await fetchStores();
-      } else {
-        throw new Error('Service tidak tersedia');
       }
-    } catch {
-      setStores((prev) =>
-        prev.map((s) => (s.id === store.id ? { ...s, status: newStatus } : s))
-      );
+    } catch (err) {
+      console.warn('Simpan status lokal aktif.', err);
     } finally {
       setStoreActionId(null);
     }
   };
 
-  // ---- Actions: Users ----
+  // ---- Aksi Users ----
   const handleUserSuspend = async (user, action) => {
     const verb = action === 'suspend' ? 'menangguhkan' : 'mengaktifkan kembali';
     if (!confirm(`Yakin ingin ${verb} user "${user.email}"?`)) return;
@@ -346,8 +397,6 @@ export default function AdminDashboard() {
           await userService.suspend(user.id);
         } else if (typeof userService.unsuspend === 'function') {
           await userService.unsuspend(user.id);
-        } else {
-          throw new Error('Service tidak tersedia');
         }
       }
       await fetchUsers();
@@ -362,7 +411,7 @@ export default function AdminDashboard() {
     }
   };
 
-  // ---- Actions: Products & Reviews ----
+  // ---- Aksi Products & Reviews ----
   const handleDeleteProduct = (prodId) => {
     if (!confirm('Take down produk ini dari platform?')) return;
     setProducts((prev) => prev.filter((p) => p.id !== prodId));
@@ -384,7 +433,7 @@ export default function AdminDashboard() {
     }
   };
 
-  // ---- Actions: Vouchers ----
+  // ---- Aksi Vouchers ----
   const handleCreateVoucher = (e) => {
     e.preventDefault();
     if (!newVoucher.code || !newVoucher.discount_value) {
@@ -462,9 +511,10 @@ export default function AdminDashboard() {
   const totalUsers = users.length;
   const totalReviews = reviews.length;
   const totalGMV = transactions.reduce((acc, t) => acc + t.total_amount, 0);
-  const avgRating = totalReviews > 0
-    ? (reviews.reduce((sum, r) => sum + Number(r.rating || 0), 0) / totalReviews).toFixed(1)
-    : '0.0';
+  const avgRating =
+    totalReviews > 0
+      ? (reviews.reduce((sum, r) => sum + Number(r.rating || 0), 0) / totalReviews).toFixed(1)
+      : '0.0';
 
   const ratingDistribution = [5, 4, 3, 2, 1].map((star) => {
     const count = reviews.filter((r) => Number(r.rating) === star).length;
@@ -472,47 +522,56 @@ export default function AdminDashboard() {
     return { star, count, percent };
   });
 
-  // Filtered Lists (Include Search Query)
+  // Filtered Lists
   const filteredStores = stores
     .filter((s) => storeStatusFilter === 'all' || s.status === storeStatusFilter)
-    .filter((s) =>
-      s.store_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      s.owner_email.toLowerCase().includes(searchQuery.toLowerCase())
+    .filter(
+      (s) =>
+        (s.store_name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (s.owner_email || '').toLowerCase().includes(searchQuery.toLowerCase())
     );
 
   const filteredUsers = users
     .filter((u) => userRoleFilter === 'all' || u.role === userRoleFilter)
-    .filter((u) =>
-      u.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      u.username.toLowerCase().includes(searchQuery.toLowerCase())
+    .filter(
+      (u) =>
+        (u.email || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (u.username || '').toLowerCase().includes(searchQuery.toLowerCase())
     );
 
-  const filteredProducts = products.filter((p) =>
-    p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    p.store_name.toLowerCase().includes(searchQuery.toLowerCase())
+  const filteredProducts = products.filter(
+    (p) =>
+      (p.name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (p.store_name || '').toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const filteredTransactions = transactions.filter((t) =>
-    t.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    t.store_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    t.buyer_name.toLowerCase().includes(searchQuery.toLowerCase())
+  const filteredTransactions = transactions.filter(
+    (t) =>
+      (t.id || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (t.store_name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (t.buyer_name || '').toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   const filteredVouchers = vouchers.filter((v) =>
-    v.code.toLowerCase().includes(searchQuery.toLowerCase())
+    (v.code || '').toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   const filteredReviews = reviews
     .filter((r) => filterRating === 'all' || Number(r.rating) === Number(filterRating))
-    .filter((r) =>
-      r.username.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      r.product_name.toLowerCase().includes(searchQuery.toLowerCase())
+    .filter(
+      (r) =>
+        (r.username || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (r.product_name || '').toLowerCase().includes(searchQuery.toLowerCase())
     );
 
   // Helpers
   const formatDate = (isoStr) => {
     try {
-      return new Date(isoStr).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' });
+      return new Date(isoStr).toLocaleDateString('id-ID', {
+        day: 'numeric',
+        month: 'short',
+        year: 'numeric',
+      });
     } catch {
       return isoStr;
     }
@@ -525,7 +584,6 @@ export default function AdminDashboard() {
 
   return (
     <div className="max-w-7xl mx-auto px-6 py-10">
-      {/* Dev Mode Notification Banner */}
       <div className="mb-6 bg-yellow-300 border-4 border-black p-3 text-xs font-black uppercase flex justify-between items-center shadow-brutal">
         <span>⚡ MODE ADMIN DEV / TESTING (AKSES BYPASS AKTIF)</span>
         <a href="/" className="bg-black text-white px-2 py-1 hover:bg-red-500 transition">
@@ -543,7 +601,6 @@ export default function AdminDashboard() {
         avgRating={avgRating}
       />
 
-      {/* Global Toolbar: Search Bar & Export Button */}
       <div className="my-6 bg-gray-100 border-4 border-black p-4 flex flex-col sm:flex-row justify-between items-center gap-4 shadow-brutal">
         <div className="w-full sm:w-96">
           <input
@@ -571,7 +628,6 @@ export default function AdminDashboard() {
         totalReviews={totalReviews}
       />
 
-      {/* Extra Tabs Navigation */}
       <div className="flex flex-wrap gap-2 my-4">
         <button
           onClick={() => handleTabSwitch('products')}
@@ -626,10 +682,8 @@ export default function AdminDashboard() {
         />
       )}
 
-      {/* TAB VOUCHER PROMO */}
       {activeTab === 'vouchers' && (
         <div className="space-y-6 mt-4">
-          {/* Form Buat Voucher */}
           <div className="bg-yellow-300 border-4 border-black p-6 shadow-brutal">
             <h2 className="text-xl font-black uppercase mb-4">➕ Buat Voucher Promo Baru</h2>
             <form onSubmit={handleCreateVoucher} className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -712,7 +766,6 @@ export default function AdminDashboard() {
             </form>
           </div>
 
-          {/* Tabel Daftar Voucher */}
           <div className="bg-white border-4 border-black p-6 shadow-brutal">
             <h2 className="text-xl font-black uppercase mb-4">Daftar Voucher Aktif & Kategori</h2>
             <div className="overflow-x-auto">
@@ -733,7 +786,9 @@ export default function AdminDashboard() {
                     <tr key={v.id} className="border-b border-black hover:bg-gray-50">
                       <td className="p-3 border-r-2 border-black font-mono font-black text-sm">{v.code}</td>
                       <td className="p-3 border-r-2 border-black">
-                        {v.discount_type === 'percentage' ? `${v.discount_value}%` : `Rp ${v.discount_value.toLocaleString('id-ID')}`}
+                        {v.discount_type === 'percentage'
+                          ? `${v.discount_value}%`
+                          : `Rp ${v.discount_value.toLocaleString('id-ID')}`}
                       </td>
                       <td className="p-3 border-r-2 border-black">Rp {v.min_purchase.toLocaleString('id-ID')}</td>
                       <td className="p-3 border-r-2 border-black">
@@ -741,9 +796,11 @@ export default function AdminDashboard() {
                       </td>
                       <td className="p-3 border-r-2 border-black">{v.valid_until}</td>
                       <td className="p-3 border-r-2 border-black">
-                        <span className={`px-2 py-0.5 border border-black text-[10px] uppercase font-black ${
-                          v.is_active ? 'bg-green-400 text-black' : 'bg-red-400 text-white'
-                        }`}>
+                        <span
+                          className={`px-2 py-0.5 border border-black text-[10px] uppercase font-black ${
+                            v.is_active ? 'bg-green-400 text-black' : 'bg-red-400 text-white'
+                          }`}
+                        >
                           {v.is_active ? 'AKTIF' : 'NONAKTIF'}
                         </span>
                       </td>
@@ -770,7 +827,6 @@ export default function AdminDashboard() {
         </div>
       )}
 
-      {/* TAB PRODUK */}
       {activeTab === 'products' && (
         <div className="bg-white border-4 border-black p-6 shadow-brutal mt-4">
           <h2 className="text-xl font-black uppercase mb-4">Moderasi Katalog Produk</h2>
@@ -810,7 +866,6 @@ export default function AdminDashboard() {
         </div>
       )}
 
-      {/* TAB TRANSAKSI */}
       {activeTab === 'transactions' && (
         <div className="bg-white border-4 border-black p-6 shadow-brutal mt-4">
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 pb-4 border-b-2 border-black gap-4">
@@ -844,10 +899,15 @@ export default function AdminDashboard() {
                     <td className="p-3 border-r-2 border-black">{t.payment_method}</td>
                     <td className="p-3 border-r-2 border-black font-black">Rp {t.total_amount.toLocaleString('id-ID')}</td>
                     <td className="p-3">
-                      <span className={`px-2 py-0.5 border border-black text-[10px] uppercase font-black ${
-                        t.status === 'completed' ? 'bg-green-400 text-black' :
-                        t.status === 'paid' ? 'bg-blue-300 text-black' : 'bg-yellow-300 text-black'
-                      }`}>
+                      <span
+                        className={`px-2 py-0.5 border border-black text-[10px] uppercase font-black ${
+                          t.status === 'completed'
+                            ? 'bg-green-400 text-black'
+                            : t.status === 'paid'
+                            ? 'bg-blue-300 text-black'
+                            : 'bg-yellow-300 text-black'
+                        }`}
+                      >
                         {t.status}
                       </span>
                     </td>
@@ -859,7 +919,6 @@ export default function AdminDashboard() {
         </div>
       )}
 
-      {/* TAB REVIEWS */}
       {activeTab === 'reviews' && (
         <ReviewsTab
           reviews={filteredReviews}

@@ -22,7 +22,7 @@ import RegisterSeller from './pages/seller/RegisterSeller';
 import UserDashboard from './pages/user/UserDashboard';
 import UserProfile from './pages/user/UserProfile';
 import OrderHistory from './pages/user/OrderHistory';
-
+import UserChat from './pages/user/UserChat';
 import AdminDashboard from './pages/admin/AdminDashboard';
 
 function AppContent() {
@@ -47,6 +47,7 @@ function AppContent() {
             {/* USER ROUTES */}
             <Route path="/profile" element={<UserProfile />} />
             <Route path="/user/dashboard" element={<UserDashboard />} />
+            <Route path="/user/chat" element={<UserChat />} />
             <Route
               path="/user/orders"
               element={

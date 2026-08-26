@@ -5,8 +5,8 @@ import { CartContext } from '../../context/CartContext';
 import { AuthContext } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
 import CheckoutModal from '../../components/CheckoutModal';
+import LoginModal from '../../components/LoginModal';
 
-// --- DATA DUMMY UNTUK TAMPILAN HOMEPAGE / FALLBACK ---
 const DUMMY_PRODUCTS = [
   {
     id: '1',
@@ -78,14 +78,28 @@ export default function ProductDetail() {
   const [loading, setLoading] = useState(true);
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
   const [isWishlisted, setIsWishlisted] = useState(false);
+  const [isLoginOpen, setIsLoginOpen] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
 
+    const fetchReviews = async (productId) => {
+      try {
+        const reviewRes = await reviewService.getByProduct(productId);
+        if (!cancelled && reviewRes) {
+          const list = Array.isArray(reviewRes.data)
+            ? reviewRes.data
+            : reviewRes.data?.results || reviewRes.data?.data || [];
+          setReviews(list.length > 0 ? list : DUMMY_REVIEWS);
+        }
+      } catch {
+        if (!cancelled) setReviews(DUMMY_REVIEWS);
+      }
+    };
+
     const fetchData = async () => {
       setLoading(true);
       try {
-        // 1. Coba ambil dari backend
         const res = await productService.getDetail(id);
         const data = res.data?.data || res.data;
 
@@ -97,7 +111,6 @@ export default function ProductDetail() {
         }
       } catch (err) {
         if (cancelled) return;
-        // 2. Fallback ke Data Dummy jika API gagal/belum tersedia
         console.warn('API Produk gagal, menggunakan Data Dummy:', err);
         
         const dummyFound = DUMMY_PRODUCTS.find((p) => String(p.id) === String(id)) || {
@@ -118,20 +131,6 @@ export default function ProductDetail() {
       }
     };
 
-    const fetchReviews = async (productId) => {
-      try {
-        const reviewRes = await reviewService.getByProduct(productId);
-        if (!cancelled && reviewRes) {
-          const list = Array.isArray(reviewRes.data)
-            ? reviewRes.data
-            : reviewRes.data?.results || reviewRes.data?.data || [];
-          setReviews(list.length > 0 ? list : DUMMY_REVIEWS);
-        }
-      } catch {
-        if (!cancelled) setReviews(DUMMY_REVIEWS);
-      }
-    };
-
     fetchData();
 
     return () => {
@@ -139,11 +138,19 @@ export default function ProductDetail() {
     };
   }, [id]);
 
-  // Cek status Wishlist dari localStorage saat produk siap
+// Cek status Wishlist dari localStorage saat produk siap
   useEffect(() => {
     if (product?.id) {
-      const savedWishlist = JSON.parse(localStorage.getItem('warmart_wishlist') || '[]');
-      setIsWishlisted(savedWishlist.some((item) => String(item.id) === String(product.id)));
+      try {
+        const savedWishlist = JSON.parse(localStorage.getItem('warmart_wishlist') || '[]');
+        const exists = savedWishlist.some((item) => String(item.id) === String(product.id));
+        
+        queueMicrotask(() => {
+          setIsWishlisted(exists);
+        });
+      } catch {
+        // Safe
+      }
     }
   }, [product]);
 
@@ -154,17 +161,21 @@ export default function ProductDetail() {
       return;
     }
 
-    let savedWishlist = JSON.parse(localStorage.getItem('warmart_wishlist') || '[]');
-    if (isWishlisted) {
-      savedWishlist = savedWishlist.filter((item) => String(item.id) !== String(product.id));
-      setIsWishlisted(false);
-      showToast('Dihapus dari Wishlist', 'info');
-    } else {
-      savedWishlist.push(product);
-      setIsWishlisted(true);
-      showToast('Ditambahkan ke Wishlist! ❤️', 'success');
+    try {
+      let savedWishlist = JSON.parse(localStorage.getItem('warmart_wishlist') || '[]');
+      if (isWishlisted) {
+        savedWishlist = savedWishlist.filter((item) => String(item.id) !== String(product.id));
+        setIsWishlisted(false);
+        showToast('Dihapus dari Wishlist', 'info');
+      } else {
+        savedWishlist.push(product);
+        setIsWishlisted(true);
+        showToast('Ditambahkan ke Wishlist! ❤️', 'success');
+      }
+      localStorage.setItem('warmart_wishlist', JSON.stringify(savedWishlist));
+    } catch {
+      // Safe
     }
-    localStorage.setItem('warmart_wishlist', JSON.stringify(savedWishlist));
   };
 
   if (loading) {
@@ -188,7 +199,7 @@ export default function ProductDetail() {
   const handleAddToCart = () => {
     if (!user) {
       showToast('Silakan login terlebih dahulu untuk menambah ke keranjang!', 'error');
-      navigate('/login', { state: { from: `/product/${id}` } });
+      setIsLoginOpen(true);
       return;
     }
 
@@ -199,7 +210,7 @@ export default function ProductDetail() {
   const handleBuyNow = () => {
     if (!user) {
       showToast('Silakan login terlebih dahulu untuk membeli!', 'error');
-      navigate('/login', { state: { from: `/product/${id}` } });
+      setIsLoginOpen(true);
       return;
     }
 
@@ -209,7 +220,7 @@ export default function ProductDetail() {
   const handleChatSeller = () => {
     if (!user) {
       showToast('Silakan login terlebih dahulu untuk chat dengan penjual!', 'error');
-      navigate('/login', { state: { from: `/product/${id}` } });
+      setIsLoginOpen(true);
       return;
     }
 
@@ -372,6 +383,8 @@ export default function ProductDetail() {
         onClose={() => setIsCheckoutOpen(false)}
         onSuccess={() => navigate('/user/orders')}
       />
+
+      <LoginModal isOpen={isLoginOpen} onClose={() => setIsLoginOpen(false)} />
     </div>
   );
 }

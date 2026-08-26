@@ -9,12 +9,19 @@ const authService = {
 
   /** 
    * POST /auth/google/ — login via Google token. 
-   * Menerima parameter berupa string token (e.g. "eyJhbG...") atau objek (e.g. { token: "..." })
+   * Mendukung pengiriman string token atau objek payload fleksibel
    */
   googleLogin: (tokenOrData) => {
-    const payload = typeof tokenOrData === 'string'
-      ? { token: tokenOrData, google_token: tokenOrData }
-      : tokenOrData;
+    let payload = tokenOrData;
+
+    if (typeof tokenOrData === 'string') {
+      payload = {
+        token: tokenOrData,
+        google_token: tokenOrData,
+        id_token: tokenOrData,
+        access_token: tokenOrData,
+      };
+    }
 
     return API.post('/auth/google/', payload);
   },

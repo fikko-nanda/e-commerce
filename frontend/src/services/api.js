@@ -7,13 +7,25 @@ const API = axios.create({
   },
 });
 
-// Interceptor: sisipkan access token ke setiap request
+// Interceptor: sisipkan access token ke setiap request (KECUALI endpoint auth publik)
 API.interceptors.request.use(
   (config) => {
-    // Cari token dari 'access_token' atau 'token'
+    // 1. Abaikan token untuk endpoint login, register, dan refresh
+    const isPublicAuthEndpoint =
+      config.url?.includes('/auth/login') ||
+      config.url?.includes('/auth/register') ||
+      config.url?.includes('/auth/refresh') ||
+      config.url?.includes('/auth/google');
+
+    if (isPublicAuthEndpoint) {
+      delete config.headers.Authorization;
+      return config;
+    }
+
+    // 2. Cari token dari 'access_token' atau 'token'
     let token = localStorage.getItem('access_token') || localStorage.getItem('token');
     
-    // Jika masih kosong, coba ambil dari objek user jika ada
+    // Jika masih kosong, coba ambil dari objek user
     if (!token) {
       try {
         const warmartUser = JSON.parse(localStorage.getItem('warmart_user') || '{}');
@@ -26,6 +38,7 @@ API.interceptors.request.use(
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
+
     return config;
   },
   (error) => Promise.reject(error)
@@ -45,12 +58,10 @@ API.interceptors.response.use(
   async (error) => {
     const originalRequest = error.config;
 
-    // Jika bukan 401 atau sudah retry, lempar error
     if (!error.response || error.response.status !== 401 || originalRequest._retry) {
       return Promise.reject(error);
     }
 
-    // Jangan refresh untuk endpoint auth/login/register/refresh
     if (
       originalRequest.url?.includes('/auth/login') ||
       originalRequest.url?.includes('/auth/register') ||
@@ -89,10 +100,6 @@ API.interceptors.response.use(
       return API(originalRequest);
     } catch (err) {
       processQueue(err, null);
-      
-      // ❌ REDIRECT DIKOMENTARI SUPAYA TIDAK MEMANTUL KE HOME SAAT TESTING/DEV:
-      // window.location.href = '/';
-      
       console.warn('Akses ditolak / Refresh token expired (Mode Dev: Redirect diabaikan)');
       return Promise.reject(err);
     } finally {

@@ -5,7 +5,6 @@ import ProductCard from '../../components/ProductCard';
 import MarqueeBanner from '../../components/MarqueeBanner';
 import CategoryFilter from '../../components/CategoryFilter';
 
-// Data dummy cadangan jika API backend belum ada / kosong
 const DUMMY_PRODUCTS = [
   {
     id: 'prod-1',
@@ -62,11 +61,9 @@ export default function Home() {
   const [sortBy, setSortBy] = useState('newest');
 
   const handleCategoryChange = (cat) => {
-    setLoading(true);
     setSelectedCategory(cat);
   };
 
-  // Debounce pencarian
   useEffect(() => {
     const timer = setTimeout(() => {
       setDebouncedSearch(searchQuery);
@@ -74,10 +71,8 @@ export default function Home() {
     return () => clearTimeout(timer);
   }, [searchQuery]);
 
-  // Fetch API + Fallback ke Data Dummy
   useEffect(() => {
     let cancelled = false;
-    setLoading(true);
 
     productService
       .getAll(selectedCategory)
@@ -93,7 +88,18 @@ export default function Home() {
           : [];
 
         if (dataList && dataList.length > 0) {
-          setProducts(dataList);
+          // Normalisasi gambar dari backend Django
+          const formattedProducts = dataList.map((item) => {
+            let img = item.image || item.image_url || item.photo || '';
+            if (img && img.startsWith('/')) {
+              img = `http://127.0.0.1:8000${img}`;
+            }
+            return {
+              ...item,
+              image: img || 'https://images.unsplash.com/photo-1521572267360-ee0c2909d518?w=500&auto=format&fit=crop&q=80',
+            };
+          });
+          setProducts(formattedProducts);
         } else {
           const filteredDummy =
             selectedCategory === 'all'
@@ -118,7 +124,6 @@ export default function Home() {
     };
   }, [selectedCategory]);
 
-  // Filter kata kunci pencarian + Sorting
   const filteredProducts = products
     .filter(
       (p) =>
@@ -133,7 +138,6 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-white">
-      {/* BAR NAVIGASI DEV SEMENTARA (BYPASS LOGIN) */}
       <div className="bg-red-500 text-white border-b-4 border-black p-3 text-xs font-black uppercase">
         <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3">
           <div className="flex items-center gap-2">
@@ -171,7 +175,6 @@ export default function Home() {
       <MarqueeBanner />
 
       <div className="max-w-7xl mx-auto px-6 py-12">
-        {/* Banner Hero Utama */}
         <div className="bg-yellow-300 border-4 border-black p-8 md:p-12 shadow-brutal-lg mb-8 flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
           <div className="max-w-xl">
             <span className="bg-black text-white text-[10px] font-black px-2.5 py-1 uppercase tracking-widest inline-block mb-3">
@@ -192,7 +195,6 @@ export default function Home() {
           </a>
         </div>
 
-        {/* BANNER CTA: PENDAFTARAN SELLER BARU */}
         <div className="bg-black text-white border-4 border-black p-6 md:p-8 shadow-brutal mb-12 flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
           <div className="space-y-2 max-w-2xl">
             <div className="flex items-center gap-2">
@@ -218,13 +220,11 @@ export default function Home() {
           </Link>
         </div>
 
-        {/* Section Katalog */}
         <div id="katalog">
           <h2 className="text-3xl font-black uppercase tracking-tighter border-b-4 border-black pb-3">
             Katalog Produk
           </h2>
 
-          {/* Controls */}
           <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 my-6">
             <CategoryFilter
               selectedCategory={selectedCategory}
@@ -232,7 +232,6 @@ export default function Home() {
             />
 
             <div className="flex flex-col sm:flex-row items-center gap-3">
-              {/* Search Bar */}
               <div className="relative w-full sm:w-64">
                 <input
                   type="text"
@@ -254,7 +253,6 @@ export default function Home() {
                 )}
               </div>
 
-              {/* Sort Dropdown */}
               <select
                 value={sortBy}
                 onChange={(e) => setSortBy(e.target.value)}
@@ -267,7 +265,6 @@ export default function Home() {
             </div>
           </div>
 
-          {/* Grid Produk */}
           {loading ? (
             <div className="text-center py-20 font-black text-gray-400 uppercase">
               Memuat Produk...

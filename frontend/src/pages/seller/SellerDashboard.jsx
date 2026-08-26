@@ -3,6 +3,16 @@ import { AuthContext } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
 import { storeService, productService, orderService, reviewService } from '../../services';
 
+// Import komponen anak yang sudah dipisah
+import ShippingModal from './components/ShippingModal';
+import ProductTab from './components/ProductTab';
+import OrderTab from './components/OrderTab';
+import AnalyticsTab from './components/AnalyticsTab';
+import VoucherTab from './components/VoucherTab';
+import ReviewTab from './components/ReviewTab';
+import WalletTab from './components/WalletTab';
+import SettingsTab from './components/SettingsTab';
+
 const API_ORIGIN = 'http://127.0.0.1:8000';
 
 function toAbsoluteUrl(url) {
@@ -19,27 +29,51 @@ function normalizeProduct(p) {
     category: p.category || 'tshirt',
     description: p.description || '',
     image: toAbsoluteUrl(p.image),
-    sold: Number(p.sold_count || p.sold || Math.floor(Math.random() * 50) + 5),
+    sold: Number(p.sold_count || p.sold || 0),
   };
 }
 
 function getOrderStatus(order) {
-  if (order.shipping_status === 'shipped') return 'Dikirim';
-  if (order.shipping_status === 'delivered') return 'Selesai';
-  if (order.payment_status === 'paid') return 'Perlu Dikirim';
-  const map = { pending: 'Pending', failed: 'Gagal', expired: 'Kadaluarsa' };
-  return map[order.payment_status] || 'Pending';
+  const shipStatus = (order.shipping_status || '').toLowerCase();
+  const payStatus = (order.payment_status || '').toLowerCase();
+  const payMethod = (order.payment_method || '').toLowerCase();
+
+  if (shipStatus === 'shipped') return 'Dikirim';
+  if (shipStatus === 'delivered') return 'Selesai';
+  if (payStatus === 'paid' || payMethod === 'cod') return 'Perlu Dikirim';
+  if (payStatus === 'failed') return 'Gagal';
+  if (payStatus === 'expired') return 'Kadaluarsa';
+
+  return 'Pending';
+}
+
+function extractCourier(order) {
+  if (order.courier_name) return order.courier_name;
+  if (order.courier) return order.courier;
+
+  const address = order.shipping_address || '';
+  if (address.startsWith('[')) {
+    const match = address.match(/^\[(.*?)\]/);
+    if (match && match[1]) {
+      return match[1].replace(/[\u{1F300}-\u{1F6FF}\u{1F900}-\u{1F9FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/gu, '').trim();
+    }
+  }
+
+  return 'J&T Express';
 }
 
 function normalizeOrder(o) {
   return {
     id: o.id,
     customer: o.buyer_username || o.buyer_email || 'Pembeli',
-    items: `${o.product_name} (${o.quantity} pcs)`,
+    items: `${o.product_name || o.product?.name || 'Produk'} (${o.quantity || 1} pcs)`,
     total: Number(o.total_price || 0),
     status: getOrderStatus(o),
     shipping_status: o.shipping_status,
     payment_status: o.payment_status,
+    payment_method: o.payment_method,
+    tracking_number: o.tracking_number || o.resi || o.tracking_code || '',
+    courier_name: extractCourier(o),
     date: (o.created_at || '').split('T')[0],
   };
 }
@@ -48,10 +82,9 @@ export default function SellerDashboard() {
   const { user } = useContext(AuthContext) || {};
   const { showToast } = useToast();
 
-  // Tab Active State: 'products' | 'orders' | 'analytics' | 'promotions' | 'reviews' | 'wallet' | 'settings'
   const [activeTab, setActiveTab] = useState('products');
+  const [isSuspended, setIsSuspended] = useState(false);
 
-  // State Profil Toko
   const [storeInfo, setStoreInfo] = useState({
     name: user?.first_name ? `${user.first_name} Store` : 'Toko Saya',
     description: 'Penyedia streetwear & fashion lokal kualitas brutal.',
@@ -59,45 +92,21 @@ export default function SellerDashboard() {
     logoFile: null,
   });
 
-  // Data Produk, Pesanan, & Loading
   const [products, setProducts] = useState([]);
   const [orders, setOrders] = useState([]);
   const [loadingProducts, setLoadingProducts] = useState(true);
   const [loadingOrders, setLoadingOrders] = useState(true);
   const [savingStore, setSavingStore] = useState(false);
 
-  // State Fitur Baru Ala Shopee
-  // 1. Promosi / Voucher Toko
+  const [shippingModalOrderId, setShippingModalOrderId] = useState(null);
+
   const [vouchers, setVouchers] = useState([
-    {
-      id: 1,
-      code: 'NEO10K',
-      discount: 'Rp 10.000',
-      minSpend: 100000,
-      quota: 50,
-      used: 12,
-      status: 'Aktif',
-    },
-    {
-      id: 2,
-      code: 'BRUTAL20',
-      discount: '20%',
-      minSpend: 250000,
-      quota: 30,
-      used: 30,
-      status: 'Habis',
-    },
+    { id: 1, code: 'NEO10K', discount: 'Rp 10.000', minSpend: 100000, quota: 50, used: 12, status: 'Aktif' },
+    { id: 2, code: 'BRUTAL20', discount: '20%', minSpend: 250000, quota: 30, used: 30, status: 'Habis' },
   ]);
   const [isVoucherModalOpen, setIsVoucherModalOpen] = useState(false);
-  const [voucherForm, setVoucherForm] = useState({
-    code: '',
-    type: 'fixed', // 'fixed' | 'percentage'
-    amount: '',
-    minSpend: '',
-    quota: '',
-  });
+  const [voucherForm, setVoucherForm] = useState({ code: '', type: 'fixed', amount: '', minSpend: '', quota: '' });
 
-  // 2. Ulasan Pembeli
   const [reviews, setReviews] = useState([
     {
       id: 101,
@@ -108,30 +117,18 @@ export default function SellerDashboard() {
       date: '2026-08-15',
       reply: 'Terima kasih bosku sudah belanja! Ditunggu orderan berikutnya 🔥',
     },
-    {
-      id: 102,
-      productName: 'Overpriced Hoodie Off-White',
-      buyer: 'budi_santoso',
-      rating: 4,
-      comment: 'Hoodienya hangat, ukuran sesuai deskripsi. Cuma agak sedikit lama di kurir.',
-      date: '2026-08-18',
-      reply: '',
-    },
   ]);
   const [replyInputs, setReplyInputs] = useState({});
 
-  // 3. Saldo Toko & Penarikan
   const [wallet, setWallet] = useState({
     balance: 1450000,
     pendingBalance: 320000,
     history: [
       { id: 'WD-001', date: '2026-08-10', amount: 500000, bank: 'BCA (1234xxxx)', status: 'Selesai' },
-      { id: 'WD-002', date: '2026-08-01', amount: 1200000, bank: 'BCA (1234xxxx)', status: 'Selesai' },
     ],
   });
   const [withdrawForm, setWithdrawForm] = useState({ bank: 'BCA', accountNumber: '', amount: '' });
 
-  // Modal State Produk
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState(null);
   const [formData, setFormData] = useState({
@@ -144,9 +141,6 @@ export default function SellerDashboard() {
     imageFile: null,
   });
 
-  // ============================================
-  // LOAD DATA API
-  // ============================================
   useEffect(() => {
     let cancelled = false;
 
@@ -161,9 +155,13 @@ export default function SellerDashboard() {
             description: s.address || s.description || prev.description,
             logo: s.logo ? toAbsoluteUrl(s.logo) : s.image ? toAbsoluteUrl(s.image) : prev.logo,
           }));
+
+          if (s.status === 'suspended') {
+            setIsSuspended(true);
+          }
         }
       } catch {
-        // Abaikan jika belum punya toko
+        // Abaikan
       }
 
       try {
@@ -197,7 +195,7 @@ export default function SellerDashboard() {
           if (Array.isArray(list) && list.length > 0) setReviews(list);
         }
       } catch {
-        // Fallback ke mock review
+        // Abaikan
       }
     };
 
@@ -205,12 +203,10 @@ export default function SellerDashboard() {
     return () => {
       cancelled = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [showToast]);
 
   const totalSales = orders.reduce((sum, order) => sum + order.total, 0);
 
-  // Handlers
   const handleLogoUpload = (e) => {
     const file = e.target.files?.[0];
     if (file) {
@@ -310,42 +306,76 @@ export default function SellerDashboard() {
     }
   };
 
+  const handleConfirmShippingFromModal = async ({ courierName, trackingNumber }) => {
+    if (!shippingModalOrderId) return;
+    try {
+      const res = await orderService.updateShipping(shippingModalOrderId, {
+        courier_name: courierName,
+        tracking_number: trackingNumber,
+        shipping_status: 'shipped',
+      });
+      const updated = res?.data?.data || res?.data;
+      if (updated) {
+        setOrders((prev) => prev.map((o) => (o.id === shippingModalOrderId ? { ...o, ...normalizeOrder(updated) } : o)));
+      } else {
+        setOrders((prev) =>
+          prev.map((o) =>
+            o.id === shippingModalOrderId
+              ? { ...o, shipping_status: 'shipped', status: 'Dikirim', tracking_number: trackingNumber, courier_name: courierName }
+              : o
+          )
+        );
+      }
+      showToast('🚀 Resi pengiriman berhasil disimpan & status diperbarui!', 'success');
+      setShippingModalOrderId(null);
+    } catch {
+      showToast('Gagal memperbarui resi pengiriman.', 'error');
+    }
+  };
+
   const handleUpdateOrderStatus = async (orderId, newStatus) => {
     try {
-      const res = await orderService.updateShipping(orderId, { shipping_status: newStatus });
+      const activeOrder = orders.find((o) => o.id === orderId);
+      const resiCode = activeOrder?.tracking_number || `RESI-${String(orderId).replace(/[^a-zA-Z0-9]/g, '').slice(-8).toUpperCase()}`;
+      const courier = activeOrder?.courier_name || 'J&T Express';
+
+      const res = await orderService.updateShipping(orderId, {
+        courier_name: courier,
+        tracking_number: resiCode,
+        shipping_status: newStatus,
+      });
       const updated = res?.data?.data || res?.data;
       if (updated) {
         setOrders((prev) => prev.map((o) => (o.id === orderId ? { ...o, ...normalizeOrder(updated) } : o)));
       }
-      showToast('Status pesanan diperbarui.', 'success');
+      showToast('Status pesanan berhasil diperbarui!', 'success');
     } catch {
       showToast('Gagal memperbarui status pesanan.', 'error');
     }
   };
 
-  // HANDLER FITUR BARU:
-  // 1. Buat Voucher Baru
-  const handleCreateVoucher = (e) => {
-    e.preventDefault();
-    if (!voucherForm.code || !voucherForm.amount) return;
+  const handleConfirmPayStatus = async (orderId) => {
+    try {
+      const activeOrder = orders.find((o) => o.id === orderId);
+      const courier = activeOrder?.courier_name || 'J&T Express';
+      const resiCode = `RESI-${String(orderId).replace(/[^a-zA-Z0-9]/g, '').slice(-8).toUpperCase()}`;
 
-    const newVoucher = {
-      id: Date.now(),
-      code: voucherForm.code.toUpperCase(),
-      discount: voucherForm.type === 'percentage' ? `${voucherForm.amount}%` : `Rp ${Number(voucherForm.amount).toLocaleString('id-ID')}`,
-      minSpend: Number(voucherForm.minSpend || 0),
-      quota: Number(voucherForm.quota || 10),
-      used: 0,
-      status: 'Aktif',
-    };
+      await orderService.updateShipping(orderId, {
+        courier_name: courier,
+        tracking_number: resiCode,
+        shipping_status: 'shipped',
+      });
 
-    setVouchers([newVoucher, ...vouchers]);
-    setIsVoucherModalOpen(false);
-    setVoucherForm({ code: '', type: 'fixed', amount: '', minSpend: '', quota: '' });
-    showToast('Voucher Toko Berhasil Dibuat!', 'success');
+      showToast('Status pesanan berhasil diperbarui!', 'success');
+
+      setOrders((prev) =>
+        prev.map((o) => (o.id === orderId ? { ...o, payment_status: 'paid', status: 'Dikirim', shipping_status: 'shipped', tracking_number: resiCode } : o))
+      );
+    } catch {
+      showToast('Gagal mengubah status pesanan.', 'error');
+    }
   };
 
-  // 2. Balas Ulasan Pembeli
   const handleReplyReview = async (reviewId) => {
     const replyText = replyInputs[reviewId];
     if (!replyText?.trim()) return;
@@ -353,17 +383,14 @@ export default function SellerDashboard() {
     try {
       await reviewService.replyReview(reviewId, replyText);
     } catch {
-      // Abaikan error jika backend belum siap
+      // Abaikan
     }
 
-    setReviews((prev) =>
-      prev.map((r) => (r.id === reviewId ? { ...r, reply: replyText } : r))
-    );
+    setReviews((prev) => prev.map((r) => (r.id === reviewId ? { ...r, reply: replyText } : r)));
     setReplyInputs((prev) => ({ ...prev, [reviewId]: '' }));
     showToast('Balasan ulasan telah terkirim.', 'success');
   };
 
-  // 3. Tarik Saldo
   const handleWithdraw = (e) => {
     e.preventDefault();
     const withdrawAmount = Number(withdrawForm.amount);
@@ -390,6 +417,26 @@ export default function SellerDashboard() {
     showToast('Permintaan penarikan dana berhasil diajukan!', 'success');
   };
 
+  const handleCreateVoucher = (e) => {
+    e.preventDefault();
+    if (!voucherForm.code || !voucherForm.amount) return;
+
+    const newVoucher = {
+      id: Date.now(),
+      code: voucherForm.code.toUpperCase(),
+      discount: voucherForm.type === 'percentage' ? `${voucherForm.amount}%` : `Rp ${Number(voucherForm.amount).toLocaleString('id-ID')}`,
+      minSpend: Number(voucherForm.minSpend || 0),
+      quota: Number(voucherForm.quota || 10),
+      used: 0,
+      status: 'Aktif',
+    };
+
+    setVouchers([newVoucher, ...vouchers]);
+    setIsVoucherModalOpen(false);
+    setVoucherForm({ code: '', type: 'fixed', amount: '', minSpend: '', quota: '' });
+    showToast('Voucher Toko Berhasil Dibuat!', 'success');
+  };
+
   return (
     <div className="max-w-7xl mx-auto px-4 py-8 space-y-8">
       {/* Banner Header Dashboard */}
@@ -401,9 +448,18 @@ export default function SellerDashboard() {
             className="w-16 h-16 md:w-20 md:h-20 object-cover border-4 border-black shadow-brutal bg-white flex-shrink-0"
           />
           <div>
-            <span className="bg-black text-white text-[10px] font-black px-2 py-0.5 uppercase tracking-widest">
-              PUSAT PENJUAL / SHOPEE MODE
-            </span>
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="bg-black text-white text-[10px] font-black px-2 py-0.5 uppercase tracking-widest">
+                PUSAT PENJUAL / SHOPEE MODE
+              </span>
+
+              {isSuspended && (
+                <span className="bg-red-600 text-white text-[10px] font-black px-2.5 py-0.5 uppercase tracking-widest border border-black animate-pulse">
+                  ⚠️ AKUN ANDA TER-SUSPEND
+                </span>
+              )}
+            </div>
+
             <h1 className="text-2xl md:text-4xl font-black uppercase tracking-tighter mt-1">
               {storeInfo.name}
             </h1>
@@ -432,7 +488,7 @@ export default function SellerDashboard() {
         <div className="bg-white border-4 border-black p-4 shadow-brutal">
           <p className="text-[10px] font-black uppercase text-gray-500">Pesanan Masuk</p>
           <p className="text-xl font-black mt-1 text-red-600">
-            {orders.filter((o) => o.status === 'Perlu Dikirim').length} Pesanan
+            {orders.filter((o) => o.status === 'Perlu Dikirim' || o.status === 'Pending').length} Pesanan
           </p>
         </div>
         <div className="bg-white border-4 border-black p-4 shadow-brutal">
@@ -441,441 +497,86 @@ export default function SellerDashboard() {
         </div>
       </div>
 
-      {/* Navigation Tabs Ala Shopee */}
+      {/* Navigation Tabs */}
       <div className="flex border-b-4 border-black gap-2 overflow-x-auto pb-1">
-        <button
-          type="button"
-          onClick={() => setActiveTab('products')}
-          className={`px-5 py-3 font-black text-xs uppercase border-t-4 border-x-4 border-black cursor-pointer transition whitespace-nowrap ${
-            activeTab === 'products' ? 'bg-black text-white -mb-1 pb-4' : 'bg-gray-100 hover:bg-yellow-300'
-          }`}
-        >
+        <button type="button" onClick={() => setActiveTab('products')} className={`px-5 py-3 font-black text-xs uppercase border-t-4 border-x-4 border-black cursor-pointer transition whitespace-nowrap ${activeTab === 'products' ? 'bg-black text-white -mb-1 pb-4' : 'bg-gray-100 hover:bg-yellow-300'}`}>
           📦 Produk ({products.length})
         </button>
-        <button
-          type="button"
-          onClick={() => setActiveTab('orders')}
-          className={`px-5 py-3 font-black text-xs uppercase border-t-4 border-x-4 border-black cursor-pointer transition whitespace-nowrap ${
-            activeTab === 'orders' ? 'bg-black text-white -mb-1 pb-4' : 'bg-gray-100 hover:bg-yellow-300'
-          }`}
-        >
+        <button type="button" onClick={() => setActiveTab('orders')} className={`px-5 py-3 font-black text-xs uppercase border-t-4 border-x-4 border-black cursor-pointer transition whitespace-nowrap ${activeTab === 'orders' ? 'bg-black text-white -mb-1 pb-4' : 'bg-gray-100 hover:bg-yellow-300'}`}>
           📑 Pesanan ({orders.length})
         </button>
-        <button
-          type="button"
-          onClick={() => setActiveTab('analytics')}
-          className={`px-5 py-3 font-black text-xs uppercase border-t-4 border-x-4 border-black cursor-pointer transition whitespace-nowrap ${
-            activeTab === 'analytics' ? 'bg-black text-white -mb-1 pb-4' : 'bg-gray-100 hover:bg-yellow-300'
-          }`}
-        >
+        <button type="button" onClick={() => setActiveTab('analytics')} className={`px-5 py-3 font-black text-xs uppercase border-t-4 border-x-4 border-black cursor-pointer transition whitespace-nowrap ${activeTab === 'analytics' ? 'bg-black text-white -mb-1 pb-4' : 'bg-gray-100 hover:bg-yellow-300'}`}>
           📊 Performa Bisnis
         </button>
-        <button
-          type="button"
-          onClick={() => setActiveTab('promotions')}
-          className={`px-5 py-3 font-black text-xs uppercase border-t-4 border-x-4 border-black cursor-pointer transition whitespace-nowrap ${
-            activeTab === 'promotions' ? 'bg-black text-white -mb-1 pb-4' : 'bg-gray-100 hover:bg-yellow-300'
-          }`}
-        >
+        <button type="button" onClick={() => setActiveTab('promotions')} className={`px-5 py-3 font-black text-xs uppercase border-t-4 border-x-4 border-black cursor-pointer transition whitespace-nowrap ${activeTab === 'promotions' ? 'bg-black text-white -mb-1 pb-4' : 'bg-gray-100 hover:bg-yellow-300'}`}>
           🎟️ Voucher Toko
         </button>
-        <button
-          type="button"
-          onClick={() => setActiveTab('reviews')}
-          className={`px-5 py-3 font-black text-xs uppercase border-t-4 border-x-4 border-black cursor-pointer transition whitespace-nowrap ${
-            activeTab === 'reviews' ? 'bg-black text-white -mb-1 pb-4' : 'bg-gray-100 hover:bg-yellow-300'
-          }`}
-        >
+        <button type="button" onClick={() => setActiveTab('reviews')} className={`px-5 py-3 font-black text-xs uppercase border-t-4 border-x-4 border-black cursor-pointer transition whitespace-nowrap ${activeTab === 'reviews' ? 'bg-black text-white -mb-1 pb-4' : 'bg-gray-100 hover:bg-yellow-300'}`}>
           ⭐ Ulasan ({reviews.length})
         </button>
-        <button
-          type="button"
-          onClick={() => setActiveTab('wallet')}
-          className={`px-5 py-3 font-black text-xs uppercase border-t-4 border-x-4 border-black cursor-pointer transition whitespace-nowrap ${
-            activeTab === 'wallet' ? 'bg-black text-white -mb-1 pb-4' : 'bg-gray-100 hover:bg-yellow-300'
-          }`}
-        >
+        <button type="button" onClick={() => setActiveTab('wallet')} className={`px-5 py-3 font-black text-xs uppercase border-t-4 border-x-4 border-black cursor-pointer transition whitespace-nowrap ${activeTab === 'wallet' ? 'bg-black text-white -mb-1 pb-4' : 'bg-gray-100 hover:bg-yellow-300'}`}>
           💰 Saldo Toko
         </button>
-        <button
-          type="button"
-          onClick={() => setActiveTab('settings')}
-          className={`px-5 py-3 font-black text-xs uppercase border-t-4 border-x-4 border-black cursor-pointer transition whitespace-nowrap ${
-            activeTab === 'settings' ? 'bg-black text-white -mb-1 pb-4' : 'bg-gray-100 hover:bg-yellow-300'
-          }`}
-        >
+        <button type="button" onClick={() => setActiveTab('settings')} className={`px-5 py-3 font-black text-xs uppercase border-t-4 border-x-4 border-black cursor-pointer transition whitespace-nowrap ${activeTab === 'settings' ? 'bg-black text-white -mb-1 pb-4' : 'bg-gray-100 hover:bg-yellow-300'}`}>
           ⚙️ Pengaturan Toko
         </button>
       </div>
 
-      {/* TAB 1: KELOLA PRODUK */}
+      {/* RENDER TAB BERDASARKAN STATE */}
       {activeTab === 'products' && (
-        <div className="space-y-4">
-          {loadingProducts ? (
-            <div className="bg-white border-4 border-black p-8 text-center shadow-brutal">
-              <p className="font-black text-sm uppercase text-gray-400">Memuat produk...</p>
-            </div>
-          ) : products.length === 0 ? (
-            <div className="bg-white border-4 border-black p-8 text-center shadow-brutal">
-              <p className="font-black text-sm uppercase">Belum ada produk yang ditambahkan.</p>
-              <button
-                type="button"
-                onClick={handleOpenAddModal}
-                className="mt-4 bg-yellow-300 border-2 border-black font-black px-4 py-2 text-xs uppercase shadow-brutal cursor-pointer"
-              >
-                + Tambah Produk Sekarang
-              </button>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {products.map((item) => (
-                <div key={item.id} className="bg-white border-4 border-black p-4 shadow-brutal flex flex-col justify-between space-y-4">
-                  <div className="flex gap-4">
-                    <img src={item.image} alt={item.name} className="w-20 h-20 object-cover border-2 border-black flex-shrink-0 bg-gray-100" />
-                    <div>
-                      <span className="bg-yellow-300 border border-black px-1.5 py-0.5 text-[9px] font-black uppercase">
-                        {item.category}
-                      </span>
-                      <h3 className="font-black text-sm uppercase line-clamp-2 mt-1">{item.name}</h3>
-                      <p className="font-black text-xs text-gray-700 mt-1">Rp {item.price.toLocaleString('id-ID')}</p>
-                      <div className="flex gap-2 text-[10px] font-bold text-gray-500 mt-1">
-                        <span>Stok: {item.stock}</span>
-                        <span>•</span>
-                        <span className="text-black font-black">Terjual: {item.sold}</span>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="flex gap-2 pt-2 border-t-2 border-black">
-                    <button
-                      type="button"
-                      onClick={() => handleOpenEditModal(item)}
-                      className="flex-1 bg-yellow-300 border-2 border-black py-1.5 text-xs font-black uppercase shadow-brutal hover:bg-black hover:text-white transition cursor-pointer"
-                    >
-                      Edit
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleDeleteProduct(item.id)}
-                      className="flex-1 bg-red-500 text-white border-2 border-black py-1.5 text-xs font-black uppercase shadow-brutal hover:bg-black transition cursor-pointer"
-                    >
-                      Hapus
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
+        <ProductTab
+          loadingProducts={loadingProducts}
+          products={products}
+          handleOpenAddModal={handleOpenAddModal}
+          handleOpenEditModal={handleOpenEditModal}
+          handleDeleteProduct={handleDeleteProduct}
+        />
       )}
 
-      {/* TAB 2: PESANAN MASUK */}
       {activeTab === 'orders' && (
-        <div className="bg-white border-4 border-black p-6 shadow-brutal space-y-4">
-          <h2 className="text-xl font-black uppercase border-b-2 border-black pb-2">Daftar Pesanan Masuk</h2>
-          {loadingOrders ? (
-            <p className="font-black text-xs uppercase text-gray-400 py-4">Memuat pesanan...</p>
-          ) : orders.length === 0 ? (
-            <p className="font-black text-xs uppercase text-gray-500 py-4">Belum ada pesanan masuk.</p>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse">
-                <thead>
-                  <tr className="border-b-4 border-black bg-gray-100 text-xs uppercase font-black">
-                    <th className="p-3">ID</th>
-                    <th className="p-3">Pembeli</th>
-                    <th className="p-3">Item</th>
-                    <th className="p-3">Total</th>
-                    <th className="p-3">Status</th>
-                    <th className="p-3">Aksi</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y-2 divide-black text-xs font-bold">
-                  {orders.map((ord) => (
-                    <tr key={ord.id} className="hover:bg-yellow-50">
-                      <td className="p-3 font-black">{ord.id}</td>
-                      <td className="p-3">{ord.customer}</td>
-                      <td className="p-3">{ord.items}</td>
-                      <td className="p-3 font-black">Rp {ord.total.toLocaleString('id-ID')}</td>
-                      <td className="p-3">
-                        <span className={`px-2 py-1 text-[10px] font-black border border-black uppercase ${
-                          ord.status === 'Perlu Dikirim' ? 'bg-yellow-300' : ord.status === 'Dikirim' ? 'bg-blue-300' : 'bg-green-300'
-                        }`}>
-                          {ord.status}
-                        </span>
-                      </td>
-                      <td className="p-3">
-                        {ord.status === 'Perlu Dikirim' && (
-                          <button
-                            type="button"
-                            onClick={() => handleUpdateOrderStatus(ord.id, 'shipped')}
-                            className="bg-black text-white px-3 py-1 font-black text-[10px] uppercase border border-black shadow-brutal hover:bg-yellow-300 hover:text-black cursor-pointer"
-                          >
-                            Atur Pengiriman
-                          </button>
-                        )}
-                        {ord.status === 'Dikirim' && (
-                          <button
-                            type="button"
-                            onClick={() => handleUpdateOrderStatus(ord.id, 'delivered')}
-                            className="bg-green-500 text-white px-3 py-1 font-black text-[10px] uppercase border border-black shadow-brutal hover:bg-black cursor-pointer"
-                          >
-                            Selesaikan
-                          </button>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
+        <OrderTab
+          loadingOrders={loadingOrders}
+          orders={orders}
+          setShippingModalOrderId={setShippingModalOrderId}
+          handleConfirmPayStatus={handleConfirmPayStatus}
+          handleUpdateOrderStatus={handleUpdateOrderStatus}
+        />
       )}
 
-      {/* TAB 3: PERFORMA BISNIS (BUSINESS INSIGHTS) */}
       {activeTab === 'analytics' && (
-        <div className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="bg-white border-4 border-black p-4 shadow-brutal">
-              <span className="text-[10px] font-black uppercase text-gray-500">Pengunjung Toko (30 Hari)</span>
-              <p className="text-2xl font-black mt-1">1,480 <span className="text-xs text-green-600 font-bold">+18%</span></p>
-            </div>
-            <div className="bg-white border-4 border-black p-4 shadow-brutal">
-              <span className="text-[10px] font-black uppercase text-gray-500">Tingkat Konversi</span>
-              <p className="text-2xl font-black mt-1">3.4% <span className="text-xs text-green-600 font-bold">Bagus</span></p>
-            </div>
-            <div className="bg-white border-4 border-black p-4 shadow-brutal">
-              <span className="text-[10px] font-black uppercase text-gray-500">Pesanan Selesai</span>
-              <p className="text-2xl font-black mt-1">{orders.length} Transaksi</p>
-            </div>
-          </div>
-
-          <div className="bg-white border-4 border-black p-6 shadow-brutal space-y-4">
-            <h3 className="text-lg font-black uppercase border-b-2 border-black pb-2">🔥 Produk Terlaris Saya</h3>
-            <div className="space-y-4">
-              {products.slice(0, 4).map((prod, idx) => (
-                <div key={prod.id} className="flex items-center justify-between gap-4 border-b pb-3 border-gray-200">
-                  <div className="flex items-center gap-3">
-                    <span className="bg-black text-white font-black w-6 h-6 flex items-center justify-center text-xs">
-                      #{idx + 1}
-                    </span>
-                    <img src={prod.image} alt={prod.name} className="w-12 h-12 object-cover border-2 border-black" />
-                    <div>
-                      <p className="font-black text-xs uppercase line-clamp-1">{prod.name}</p>
-                      <p className="text-[10px] font-bold text-gray-500">Terjual {prod.sold} pcs</p>
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <p className="font-black text-xs">Rp {(prod.price * prod.sold).toLocaleString('id-ID')}</p>
-                    <span className="text-[9px] font-bold text-green-600">Total Performa</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
+        <AnalyticsTab orders={orders} products={products} />
       )}
 
-      {/* TAB 4: VOUCHER & PROMOSI TOKO */}
       {activeTab === 'promotions' && (
-        <div className="space-y-6">
-          <div className="flex justify-between items-center bg-white border-4 border-black p-4 shadow-brutal">
-            <div>
-              <h3 className="font-black text-base uppercase">Voucher Toko Saya</h3>
-              <p className="text-xs font-bold text-gray-600">Tingkatkan penjualan dengan memberikan diskon belanja.</p>
-            </div>
-            <button
-              type="button"
-              onClick={() => setIsVoucherModalOpen(true)}
-              className="bg-yellow-300 font-black px-4 py-2 text-xs uppercase border-2 border-black shadow-brutal hover:bg-black hover:text-white transition cursor-pointer"
-            >
-              + Buat Voucher Baru
-            </button>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {vouchers.map((v) => (
-              <div key={v.id} className="bg-white border-4 border-black p-4 shadow-brutal flex justify-between items-center bg-gradient-to-r from-yellow-100 to-white">
-                <div>
-                  <span className="bg-black text-white text-[10px] font-black px-2 py-0.5 uppercase">
-                    KODE: {v.code}
-                  </span>
-                  <h4 className="text-xl font-black mt-2">Diskon {v.discount}</h4>
-                  <p className="text-[10px] font-bold text-gray-600">Min. Belanja: Rp {v.minSpend.toLocaleString('id-ID')}</p>
-                  <p className="text-[10px] font-bold text-gray-500">Kuota Terpakai: {v.used} / {v.quota}</p>
-                </div>
-                <div>
-                  <span className={`text-xs font-black px-3 py-1 border-2 border-black uppercase shadow-brutal ${
-                    v.status === 'Aktif' ? 'bg-green-400' : 'bg-gray-300'
-                  }`}>
-                    {v.status}
-                  </span>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
+        <VoucherTab vouchers={vouchers} setIsVoucherModalOpen={setIsVoucherModalOpen} />
       )}
 
-      {/* TAB 5: ULASAN PEMBELI */}
       {activeTab === 'reviews' && (
-        <div className="bg-white border-4 border-black p-6 shadow-brutal space-y-6">
-          <h2 className="text-xl font-black uppercase border-b-2 border-black pb-2">Ulasan Produk dari Pembeli</h2>
-          <div className="space-y-4">
-            {reviews.map((rev) => (
-              <div key={rev.id} className="border-2 border-black p-4 bg-gray-50 space-y-2">
-                <div className="flex justify-between items-start">
-                  <div>
-                    <span className="font-black text-xs uppercase bg-yellow-300 px-2 py-0.5 border border-black">{rev.productName}</span>
-                    <p className="text-xs font-bold text-gray-500 mt-1">Oleh: <span className="text-black font-black">{rev.buyer}</span> • {rev.date}</p>
-                  </div>
-                  <div className="text-yellow-500 text-sm font-black">
-                    {'⭐'.repeat(rev.rating)}
-                  </div>
-                </div>
-
-                <p className="text-xs font-bold text-black bg-white p-2 border border-black">{rev.comment}</p>
-
-                {rev.reply ? (
-                  <div className="bg-yellow-100 border-l-4 border-black p-2 text-xs font-bold ml-4">
-                    <p className="font-black text-[10px] uppercase text-gray-700">Balasan Toko Anda:</p>
-                    <p>{rev.reply}</p>
-                  </div>
-                ) : (
-                  <div className="flex gap-2 pt-2">
-                    <input
-                      type="text"
-                      placeholder="Tulis balasan ulasan..."
-                      value={replyInputs[rev.id] || ''}
-                      onChange={(e) => setReplyInputs({ ...replyInputs, [rev.id]: e.target.value })}
-                      className="flex-1 border-2 border-black p-1.5 text-xs font-bold focus:bg-yellow-100"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => handleReplyReview(rev.id)}
-                      className="bg-black text-white px-3 py-1.5 text-xs font-black uppercase border border-black hover:bg-yellow-300 hover:text-black cursor-pointer"
-                    >
-                      Kirim
-                    </button>
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-        </div>
+        <ReviewTab
+          reviews={reviews}
+          replyInputs={replyInputs}
+          setReplyInputs={setReplyInputs}
+          handleReplyReview={handleReplyReview}
+        />
       )}
 
-      {/* TAB 6: SALDO & PENARIKAN DANA */}
       {activeTab === 'wallet' && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {/* Card Form Tarik Saldo */}
-          <div className="bg-white border-4 border-black p-6 shadow-brutal space-y-4">
-            <h3 className="text-xl font-black uppercase border-b-2 border-black pb-2">Dompet Penjual</h3>
-            <div className="bg-green-100 border-2 border-black p-4">
-              <span className="text-xs font-black uppercase text-gray-600">Saldo Siap Ditarik</span>
-              <p className="text-3xl font-black text-green-800 mt-1">Rp {wallet.balance.toLocaleString('id-ID')}</p>
-            </div>
-
-            <form onSubmit={handleWithdraw} className="space-y-3 pt-2">
-              <div>
-                <label className="block text-xs font-black uppercase mb-1">Pilih Bank / e-Wallet</label>
-                <select
-                  value={withdrawForm.bank}
-                  onChange={(e) => setWithdrawForm({ ...withdrawForm, bank: e.target.value })}
-                  className="w-full border-2 border-black p-2 text-xs font-bold bg-white"
-                >
-                  <option value="BCA">Bank BCA</option>
-                  <option value="Mandiri">Bank Mandiri</option>
-                  <option value="BRI">Bank BRI</option>
-                  <option value="GoPay">GoPay / OVO</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-xs font-black uppercase mb-1">Nomor Rekening / HP</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="Contoh: 8273918239"
-                  value={withdrawForm.accountNumber}
-                  onChange={(e) => setWithdrawForm({ ...withdrawForm, accountNumber: e.target.value })}
-                  className="w-full border-2 border-black p-2 text-xs font-bold"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-black uppercase mb-1">Nominal Penarikan (Rp)</label>
-                <input
-                  type="number"
-                  required
-                  placeholder="Minimum 50000"
-                  value={withdrawForm.amount}
-                  onChange={(e) => setWithdrawForm({ ...withdrawForm, amount: e.target.value })}
-                  className="w-full border-2 border-black p-2 text-xs font-bold"
-                />
-              </div>
-
-              <button
-                type="submit"
-                className="w-full bg-black text-white font-black py-3 text-xs uppercase border-2 border-black hover:bg-yellow-300 hover:text-black transition cursor-pointer"
-              >
-                Tarik Dana Sekarang
-              </button>
-            </form>
-          </div>
-
-          {/* Card Riwayat Penarikan */}
-          <div className="bg-white border-4 border-black p-6 shadow-brutal space-y-4">
-            <h3 className="text-xl font-black uppercase border-b-2 border-black pb-2">Riwayat Penarikan</h3>
-            <div className="space-y-3">
-              {wallet.history.map((h) => (
-                <div key={h.id} className="border-2 border-black p-3 flex justify-between items-center bg-gray-50">
-                  <div>
-                    <span className="font-black text-xs uppercase">{h.id}</span>
-                    <p className="text-[10px] font-bold text-gray-500">{h.bank} • {h.date}</p>
-                  </div>
-                  <div className="text-right">
-                    <p className="font-black text-xs text-red-600">- Rp {h.amount.toLocaleString('id-ID')}</p>
-                    <span className="text-[9px] font-black uppercase bg-green-300 px-1 border border-black">{h.status}</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
+        <WalletTab
+          wallet={wallet}
+          withdrawForm={withdrawForm}
+          setWithdrawForm={setWithdrawForm}
+          handleWithdraw={handleWithdraw}
+        />
       )}
 
-      {/* TAB 7: PENGATURAN TOKO */}
       {activeTab === 'settings' && (
-        <form onSubmit={handleSaveStore} className="bg-white border-4 border-black p-6 shadow-brutal max-w-xl space-y-5">
-          <h2 className="text-xl font-black uppercase border-b-2 border-black pb-2">Profil Toko</h2>
-          <div className="flex items-center gap-4 border-2 border-black p-4 bg-gray-50">
-            <img src={storeInfo.logo} alt="Preview Toko" className="w-20 h-20 object-cover border-4 border-black shadow-brutal bg-white flex-shrink-0" />
-            <div>
-              <p className="text-xs font-black uppercase">Foto Profil Toko</p>
-              <p className="text-[10px] font-bold text-gray-500 mt-0.5">Format: JPG, PNG, WEBP.</p>
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-xs font-black uppercase mb-1">Upload Foto Baru</label>
-            <input type="file" accept="image/*" onChange={handleLogoUpload} className="w-full bg-gray-50 border-2 border-black p-2 font-bold text-xs" />
-          </div>
-
-          <div>
-            <label className="block text-xs font-black uppercase mb-1">Nama Toko</label>
-            <input type="text" value={storeInfo.name} onChange={(e) => setStoreInfo({ ...storeInfo, name: e.target.value })} className="w-full border-2 border-black p-2 font-bold text-xs" />
-          </div>
-
-          <div>
-            <label className="block text-xs font-black uppercase mb-1">Deskripsi Toko</label>
-            <textarea rows={3} value={storeInfo.description} onChange={(e) => setStoreInfo({ ...storeInfo, description: e.target.value })} className="w-full border-2 border-black p-2 font-bold text-xs" />
-          </div>
-
-          <button type="submit" disabled={savingStore} className="bg-black text-white font-black px-6 py-3 text-xs uppercase border-2 border-black shadow-brutal hover:bg-yellow-300 hover:text-black transition cursor-pointer">
-            {savingStore ? 'Menyimpan...' : 'Simpan Perubahan Toko'}
-          </button>
-        </form>
+        <SettingsTab
+          storeInfo={storeInfo}
+          setStoreInfo={setStoreInfo}
+          handleSaveStore={handleSaveStore}
+          handleLogoUpload={handleLogoUpload}
+          savingStore={savingStore}
+        />
       )}
 
       {/* MODAL BUAT VOUCHER BARU */}
@@ -884,7 +585,7 @@ export default function SellerDashboard() {
           <div className="bg-white border-4 border-black p-6 max-w-md w-full shadow-brutal-lg space-y-4">
             <div className="flex justify-between items-center border-b-4 border-black pb-2">
               <h3 className="text-lg font-black uppercase">Buat Voucher Toko</h3>
-              <button type="button" onClick={() => setIsVoucherModalOpen(false)} className="font-black text-lg">✕</button>
+              <button type="button" onClick={() => setIsVoucherModalOpen(false)} className="font-black text-lg cursor-pointer">✕</button>
             </div>
 
             <form onSubmit={handleCreateVoucher} className="space-y-3">
@@ -1012,6 +713,16 @@ export default function SellerDashboard() {
           </div>
         </div>
       )}
+
+      {/* POP-UP MODAL INPUT RESI PENGIRIMAN */}
+      <ShippingModal
+        isOpen={Boolean(shippingModalOrderId)}
+        selectedCourier={
+          orders.find((o) => o.id === shippingModalOrderId)?.courier_name || 'J&T Express'
+        }
+        onClose={() => setShippingModalOrderId(null)}
+        onSubmit={handleConfirmShippingFromModal}
+      />
     </div>
   );
 }

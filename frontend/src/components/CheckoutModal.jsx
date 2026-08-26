@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { orderService } from '../services';
+import orderService from '../services/orderService';
 import { payWithMidtrans } from '../utils/loadSnap';
 
 export default function CheckoutModal({ product, isOpen, onClose, onSuccess }) {
@@ -7,6 +7,7 @@ export default function CheckoutModal({ product, isOpen, onClose, onSuccess }) {
   const [paymentMethod, setPaymentMethod] = useState('midtrans');
   const [shippingAddress, setShippingAddress] = useState('Utama');
   const [customAddress, setCustomAddress] = useState('');
+  const [courier, setCourier] = useState('J&T Express');
   const [notes, setNotes] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -17,53 +18,90 @@ export default function CheckoutModal({ product, isOpen, onClose, onSuccess }) {
     { id: 'Lainnya', label: '✏️ Tulis Alamat Baru...' },
   ];
 
+  // Opsi Pilihan Ekspedisi
+  const courierOptions = [
+    { id: 'J&T Express', label: '🚀 J&T Express (Regular)' },
+    { id: 'JNE Express', label: '📦 JNE REG' },
+    { id: 'SiCepat', label: '⚡ SiCepat Halu' },
+    { id: 'Shopee Express', label: '🚚 Shopee Express Standard' },
+    { id: 'Pos Indonesia', label: '📮 Pos Indonesia Kilat Khusus' },
+  ];
+
   if (!isOpen || !product) return null;
 
   const handleCheckoutSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
 
-    const finalAddress = shippingAddress === 'Lainnya' 
-      ? customAddress 
-      : savedAddresses.find(a => a.id === shippingAddress)?.label;
+    const rawAddress =
+      shippingAddress === 'Lainnya'
+        ? customAddress
+        : savedAddresses.find((a) => a.id === shippingAddress)?.label;
+
+    const finalAddress = `[${courier}] ${rawAddress || 'Alamat Utama'}`;
 
     try {
       const payload = {
         product_id: product.id,
         quantity: quantity,
-        payment_method: paymentMethod,
-        shipping_address: finalAddress || 'Alamat Utama',
+        payment_method: paymentMethod, // 'midtrans' atau 'cod'
+        shipping_address: finalAddress,
+        courier_name: courier,
         notes: notes,
       };
 
-      const res = await orderService.checkout(payload);
-      const { order, snap_token } = res.data;
+      // Panggil service yang tersedia
+      const submitFn = orderService.createCheckout || orderService.checkout;
+      const res = await submitFn(payload);
 
-      if (paymentMethod === 'midtrans' && snap_token) {
-        payWithMidtrans(
-          snap_token,
-          async () => {
-            try {
-              await orderService.markSuccess(order.id);
-            } catch (err) {
-              console.error('Gagal memperbarui status ke PAID:', err);
-            } finally {
-              onClose();
-              if (onSuccess) onSuccess();
+      // Ekstrak data dari respons Django
+      const resData = res?.data || res;
+      const snapToken = resData?.snap_token;
+      const redirectUrl = resData?.redirect_url;
+      const orderData = resData?.order || resData?.data || resData;
+      const activeOrderId = orderData?.id || resData?.id;
+
+      if (paymentMethod === 'midtrans') {
+        if (snapToken && typeof payWithMidtrans === 'function') {
+          payWithMidtrans(
+            snapToken,
+            async () => {
+              try {
+                if (activeOrderId && typeof orderService.markSuccess === 'function') {
+                  await orderService.markSuccess(activeOrderId);
+                }
+              } catch (err) {
+                console.warn('Handling callback status update:', err);
+              } finally {
+                onClose();
+                if (onSuccess) onSuccess();
+              }
+            },
+            () => {
+              alert('Pembayaran Gagal atau Dibatalkan.');
+              setLoading(false);
             }
-          },
-          () => {
-            alert('Pembayaran Gagal atau Dibatalkan.');
-            setLoading(false);
-          }
-        );
+          );
+        } else if (redirectUrl) {
+          // Fallback jika menggunakan Snap Redirect URL
+          window.location.href = redirectUrl;
+        } else {
+          alert('⚠️ Fitur Midtrans belum siap (Server Key belum diset di backend). Mengalihkan pesanan...');
+          onClose();
+          if (onSuccess) onSuccess();
+        }
       } else {
-        alert('Pesanan COD Berhasil Dibuat!');
+        alert('🎉 Pesanan COD Berhasil Dibuat!');
         onClose();
         if (onSuccess) onSuccess();
       }
     } catch (err) {
-      alert(err.response?.data?.error || 'Gagal melakukan checkout');
+      console.error('Checkout Error:', err.response?.data || err);
+      const errMsg =
+        err.response?.data?.error ||
+        err.response?.data?.detail ||
+        'Gagal melakukan checkout. Periksa kembali kelengkapan data.';
+      alert(`❌ ${errMsg}`);
       setLoading(false);
     }
   };
@@ -79,7 +117,7 @@ export default function CheckoutModal({ product, isOpen, onClose, onSuccess }) {
           <div>
             <p className="font-black text-sm uppercase">{product.name}</p>
             <p className="text-xs font-bold text-gray-500">
-              Rp {Number(product.price).toLocaleString('id-ID')} / item
+              Rp {Number(product.price || 0).toLocaleString('id-ID')} / item
             </p>
           </div>
 
@@ -104,7 +142,9 @@ export default function CheckoutModal({ product, isOpen, onClose, onSuccess }) {
               className="w-full border-2 border-black p-2 font-bold text-xs bg-white mb-2"
             >
               {savedAddresses.map((addr) => (
-                <option key={addr.id} value={addr.id}>{addr.label}</option>
+                <option key={addr.id} value={addr.id}>
+                  {addr.label}
+                </option>
               ))}
             </select>
 
@@ -117,6 +157,22 @@ export default function CheckoutModal({ product, isOpen, onClose, onSuccess }) {
                 className="w-full border-2 border-black p-2 font-bold text-xs h-20"
               />
             )}
+          </div>
+
+          {/* Opsi Pilih Ekspedisi Pengiriman */}
+          <div>
+            <label className="block font-black text-xs uppercase mb-1">🚚 Ekspedisi Pengiriman:</label>
+            <select
+              value={courier}
+              onChange={(e) => setCourier(e.target.value)}
+              className="w-full border-2 border-black p-2 font-bold text-xs bg-white"
+            >
+              {courierOptions.map((opt) => (
+                <option key={opt.id} value={opt.id}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
           </div>
 
           {/* Catatan untuk Penjual */}
@@ -146,7 +202,7 @@ export default function CheckoutModal({ product, isOpen, onClose, onSuccess }) {
           <div className="pt-2 border-t-2 border-black flex justify-between items-center">
             <span className="font-black text-xs uppercase">Total Bayar:</span>
             <span className="font-black text-lg bg-yellow-300 px-2 border border-black">
-              Rp {(product.price * quantity).toLocaleString('id-ID')}
+              Rp {(Number(product.price || 0) * quantity).toLocaleString('id-ID')}
             </span>
           </div>
 
@@ -155,14 +211,14 @@ export default function CheckoutModal({ product, isOpen, onClose, onSuccess }) {
               type="button"
               onClick={onClose}
               disabled={loading}
-              className="flex-1 bg-gray-200 font-black text-xs uppercase py-2.5 border-2 border-black"
+              className="flex-1 bg-gray-200 font-black text-xs uppercase py-2.5 border-2 border-black cursor-pointer"
             >
               Batal
             </button>
             <button
               type="submit"
               disabled={loading}
-              className="flex-1 bg-black text-white font-black text-xs uppercase py-2.5 border-2 border-black hover:bg-green-400 hover:text-black transition"
+              className="flex-1 bg-black text-white font-black text-xs uppercase py-2.5 border-2 border-black hover:bg-green-400 hover:text-black transition cursor-pointer"
             >
               {loading ? 'Memproses...' : 'Lanjut Bayar⚡'}
             </button>
