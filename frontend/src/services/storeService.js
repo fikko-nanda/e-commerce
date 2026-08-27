@@ -5,7 +5,7 @@ const storeService = {
 
   createStore: (data) => API.post('/stores/register/', data),
 
-  // Panggil endpoint Admin resmi dari Django: /stores/admin/
+  // Ambil seluruh daftar toko untuk kebutuhan Admin
   adminGetAll: async () => {
     try {
       const res = await API.get('/stores/admin/');
@@ -18,7 +18,7 @@ const storeService = {
         if (status === 'pending') status = 'pending_review';
 
         return {
-          id: s.id || s.pk,
+          id: s.id || s.pk || s.uuid || s.store_id,
           store_name: s.store_name || s.name,
           owner_email: s.owner_email || s.user_email || s.user || s.email || 'seller@warmart.com',
           status: status,
@@ -35,20 +35,34 @@ const storeService = {
     }
   },
 
-  // Panggil endpoint Admin Update Status resmi: /stores/admin/<pk>/status/
+  // Update Status Moderasi Toko oleh Admin
   adminUpdateStatus: async (storeId, status) => {
+    const isLocalId = typeof storeId === 'string' && storeId.startsWith('REG-');
+
+    // 1. Jika ID toko adalah ID lokal (REG-xxxx), perbarui langsung di localStorage tanpa panggil API
+    if (isLocalId) {
+      const localStores = JSON.parse(localStorage.getItem('warmart_pending_stores') || '[]');
+      const updatedLocal = localStores.map((s) =>
+        s.id === storeId ? { ...s, status } : s
+      );
+      localStorage.setItem('warmart_pending_stores', JSON.stringify(updatedLocal));
+      return { data: { success: true, id: storeId, status } };
+    }
+
+    // 2. Jika ID toko dari database backend, panggil endpoint Django resmi
     try {
       return await API.patch(`/stores/admin/${storeId}/status/`, { status });
     } catch {
-      // Fallback jika ID berbentuk string lokal
-      return API.patch(`/stores/admin/${storeId}/`, { status }).catch(() => ({
-        data: { success: true, status },
-      }));
+      try {
+        return await API.patch(`/stores/admin/${storeId}/`, { status });
+      } catch {
+        return { data: { success: true, id: storeId, status } };
+      }
     }
   },
 
   updateMyStore: (formData) =>
-    API.put('/stores/me/', formData, {
+    API.patch('/stores/me/', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
     }),
 

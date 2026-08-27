@@ -1,6 +1,12 @@
 import API from './api';
 
 const userService = {
+  // Ambil profil user login (Dipakai di UserProfile / AuthContext)
+  getProfile: () => API.get('/auth/me/'),
+
+  // Update profil user (Dipakai di UserProfile)
+  updateProfile: (data) => API.patch('/auth/me/', data),
+
   /** GET /auth/admin/users/ — daftar seluruh user (hanya admin). Filter: ?role=buyer|seller|admin */
   getAll: (role) => {
     let url = '/auth/admin/users/';

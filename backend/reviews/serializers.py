@@ -8,7 +8,6 @@ class ReviewSerializer(serializers.ModelSerializer):
     product_name = serializers.ReadOnlyField(source='product.name')
     store_name = serializers.ReadOnlyField(source='product.store.store_name')
     
-    # Gunakan PrimaryKeyRelatedField agar otomatis menyesuaikan tipe ID (UUID atau Integer)
     order_id = serializers.PrimaryKeyRelatedField(
         queryset=Order.objects.all(), 
         write_only=True, 
@@ -24,18 +23,16 @@ class ReviewSerializer(serializers.ModelSerializer):
         user = self.context['request'].user
         order = attrs.get('order')
 
-        # 1. Pastikan Order adalah milik user yang sedang login
         if order.buyer != user:
             raise serializers.ValidationError({"order_id": "Pesanan tidak ditemukan atau bukan milik Anda."})
 
-        # 2. Validasi status pembayaran (Mendukung 'PAID', 'paid', atau metode 'COD')
         pay_status = str(getattr(order, 'payment_status', '')).upper()
+        ship_status = str(getattr(order, 'shipping_status', '')).upper()
         pay_method = str(getattr(order, 'payment_method', '')).upper()
         
-        if pay_status != 'PAID' and pay_method != 'COD':
-            raise serializers.ValidationError({"order_id": "Anda hanya dapat mengulas produk dari pesanan yang sudah lunas atau COD."})
+        if pay_status != 'PAID' and ship_status not in ['DELIVERED', 'SELESAI'] and pay_method != 'COD':
+            raise serializers.ValidationError({"order_id": "Anda hanya dapat mengulas produk dari pesanan yang sudah lunas atau selesai."})
 
-        # 3. Pastikan pesanan belum pernah diulas
         if Review.objects.filter(order=order).exists():
             raise serializers.ValidationError({"order_id": "Pesanan ini sudah pernah diberi ulasan."})
 

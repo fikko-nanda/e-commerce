@@ -9,8 +9,21 @@ from .serializers import StoreRegistrationSerializer, AdminStoreSerializer
 class StoreSerializer(serializers.ModelSerializer):
     class Meta:
         model = Store
-        fields = ['id', 'store_name', 'phone', 'address', 'status', 'created_at']
+        fields = ['id', 'store_name', 'phone', 'address', 'logo', 'status', 'created_at']
         read_only_fields = fields
+
+
+class StoreUpdateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Store
+        fields = ['store_name', 'phone', 'address', 'logo']
+
+    def validate_store_name(self, value):
+        forbidden_words = ['admin', 'official', 'penipu', 'toxic']
+        for word in forbidden_words:
+            if word in value.lower():
+                raise serializers.ValidationError(f"Nama toko tidak boleh mengandung kata '{word}'.")
+        return value
 
 
 class RegisterSellerView(APIView):
@@ -52,7 +65,7 @@ class RegisterSellerView(APIView):
 
 
 class MyStoreView(APIView):
-    """GET /stores/me/ — info toko milik user yang login (atau null)."""
+    """GET/PATCH /stores/me/ — info toko milik user yang login + edit (nama/phone/address)."""
     permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request):
@@ -60,6 +73,28 @@ class MyStoreView(APIView):
         if not store:
             return Response({'store': None}, status=status.HTTP_200_OK)
         return Response({'store': StoreSerializer(store).data}, status=status.HTTP_200_OK)
+
+    def _update(self, request):
+        store = getattr(request.user, 'store', None)
+        if not store:
+            return Response({'error': 'Anda belum memiliki toko.'}, status=status.HTTP_403_FORBIDDEN)
+
+        serializer = StoreUpdateSerializer(store, data=request.data, partial=True)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        serializer.save()
+        return Response({
+            'status': 'success',
+            'message': 'Informasi toko berhasil diperbarui.',
+            'store': StoreSerializer(store).data
+        }, status=status.HTTP_200_OK)
+
+    def patch(self, request):
+        return self._update(request)
+
+    def put(self, request):
+        return self._update(request)
 
 
 class StoreUserByStoreNameView(APIView):

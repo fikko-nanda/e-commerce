@@ -67,12 +67,30 @@ Base: `/api/v1/` | WebSocket: `ws://localhost:8000/ws/chat/{room_name}/`
 
 | Endpoint | Method | Auth | Notes |
 |----------|--------|------|-------|
-| `/auth/google-auth/` | POST | ❌ | Google OAuth simulation / instant login |
-| `/stores/register-seller/` | POST | ✅ | Auto-approval if phone starts with '08' & >=10 chars |
-| `/products/` | GET,POST,PUT,DELETE | ⚠️ | CRUD products (partial auth) |
-| `/orders/` | GET,POST,PUT | ✅ | Order management with Midtrans/COD |
-| `/reviews/` | GET,POST | ✅ | Only on purchased products (paid orders) |
-| `/admin/` | - | ✅ Admin | Django admin interface |
+| `/auth/register/` | POST | ❌ | Email/password registration, returns JWT |
+| `/auth/login/` | POST | ❌ | Email+password or Google token login |
+| `/auth/google/` | POST | ❌ | Google OAuth (ID token) login/register |
+| `/auth/refresh/` | POST | ❌ | Refresh access token |
+| `/auth/me/` | GET, PATCH | ✅ | Current user profile (edit name/phone/address/bio) |
+| `/auth/admin/users/` | GET | 👑 | Admin: list users (filter `?role=`) |
+| `/auth/admin/users/<id>/suspend/` | PATCH | 👑 | Admin: suspend/unsuspend user |
+| `/stores/register/` | POST | ✅ | Seller registration, auto-approval by phone |
+| `/stores/me/` | GET, PATCH | ✅ | Seller's own store info + edit |
+| `/stores/user-by-name/` | GET | ✅ | Resolve seller user by store name |
+| `/stores/admin/` | GET | 👑 | Admin: list all stores |
+| `/stores/admin/<id>/status/` | PATCH | 👑 | Admin: change store status |
+| `/products/` | GET, POST, PUT, DELETE | ⚠️ | CRUD products (POST/PUT/DELETE need active store) |
+| `/orders/checkout/` | POST | ✅ | Create order + Midtrans Snap (or COD) |
+| `/orders/` | GET | ✅ | Buyer order history (auto-sync Midtrans) |
+| `/orders/store-orders/` | GET | ✅ | Seller: incoming orders |
+| `/orders/<id>/` | GET | ✅ | Order detail (buyer/seller) |
+| `/orders/<id>/pay/` | POST | ✅ | Regenerate Midtrans Snap for pending order |
+| `/orders/<id>/ship/` | PATCH | ✅ | Seller: set courier/tracking/shipping status |
+| `/orders/<id>/success/` | POST | ✅ | Buyer/seller: confirm COD payment |
+| `/reviews/` | GET, POST | ✅ | Only on purchased/paid/COD orders |
+| `/chats/send/` | POST | ✅ | Send chat message (also pushed via WebSocket) |
+| `/chats/` | GET | ✅ | List chat rooms |
+| `/admin/` | - | 👑 | Django admin interface |
 
 Full API reference with curl examples: `API_DOCUMENTATION.md` (299 lines)
 
@@ -92,6 +110,6 @@ python manage.py test <app_name>  # e.g., python manage.py test users, stores, p
 - **Database**: PostgreSQL `db_ecommerce` @ localhost:5432 (user: `postgres`)
 - **Redis**: Required for production WebSocket channel layer (dev uses in-memory)
 - **Environment vars**: See `backend/.env` for DB credentials, Midtrans keys, SECRET_KEY
-- **Frontend**: Currently non-existent (empty `dsd/` directory)
+- **Frontend**: React (Vite) SPA in `frontend/` (see `frontend/README.md`)
 
 ⚠️ `.env` contains sensitive data (DB passwords, API keys). Verify access before sharing.

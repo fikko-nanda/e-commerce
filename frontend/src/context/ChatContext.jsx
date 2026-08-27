@@ -55,9 +55,21 @@ export function ChatProvider({ children }) {
 
   const [conversations, setConversations] = useState(() => loadLS('warmart_conversations', {}));
   const [customerChats, setCustomerChats] = useState(() => loadLS('warmart_customer_chats', {}));
+  const [unread, setUnread] = useState(() => loadLS('warmart_chat_unread', {}));
 
   useEffect(() => { saveLS('warmart_conversations', conversations); }, [conversations]);
   useEffect(() => { saveLS('warmart_customer_chats', customerChats); }, [customerChats]);
+  useEffect(() => { saveLS('warmart_chat_unread', unread); }, [unread]);
+
+  const markRead = useCallback((key) => {
+    if (!key) return;
+    setUnread((prev) => {
+      if (!prev || prev[key] === undefined || prev[key] === 0) return prev;
+      const next = { ...prev };
+      delete next[key];
+      return next;
+    });
+  }, []);
 
   // 1. Deteksi Store: HANYA panggil jika token valid tersedia
   useEffect(() => {
@@ -148,6 +160,7 @@ export function ChatProvider({ children }) {
     if (!sellerName) return;
     setActiveCustomer(null);
     setActiveSeller(sellerName);
+    markRead(sellerName);
     setIsOpen(true);
 
     if (productInfo?.name) {
@@ -188,6 +201,7 @@ export function ChatProvider({ children }) {
   const openCustomerChat = useCallback(async (customerKey) => {
     setActiveSeller(null);
     setActiveCustomer(customerKey);
+    markRead(customerKey);
     setIsOpen(true);
 
     const custMsgs = customerChats[customerKey] || [];
@@ -250,7 +264,7 @@ export function ChatProvider({ children }) {
         const time = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
         const myStore = localStorage.getItem('myStoreName');
 
-        if (myStore && activeCustomer) {
+        if (myStore) {
           const customerKey = data.sender_email || `Customer ${String(data.sender_id || '').slice(0, 8)}`;
           setCustomerChats((prev) => ({
             ...prev,
@@ -266,6 +280,9 @@ export function ChatProvider({ children }) {
               },
             ],
           }));
+          if (activeCustomer !== customerKey) {
+            setUnread((prev) => ({ ...prev, [customerKey]: (prev[customerKey] || 0) + 1 }));
+          }
         } else if (activeSeller) {
           setConversations((prev) => ({
             ...prev,
@@ -306,21 +323,13 @@ export function ChatProvider({ children }) {
           { id: `msg-seller-${Date.now()}`, sender: 'seller', text: trimmedText, time },
         ],
       }));
+      markRead(targetCustomer);
 
       try {
         const ws = socketRef.current || window.chatSocket;
         const payload = { message: trimmedText, receiver_id: receiverId };
         if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(payload));
       } catch { /* empty */ }
-
-      const token = getAuthToken();
-      if (token && receiverId) {
-        fetch(`${API_BASE}/chats/send/`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-          body: JSON.stringify({ message: trimmedText, receiver_id: receiverId }),
-        }).catch(() => {});
-      }
       return;
     }
 
@@ -332,23 +341,15 @@ export function ChatProvider({ children }) {
           { id: `msg-user-${Date.now()}`, sender: 'user', text: trimmedText, time },
         ],
       }));
+      markRead(targetSeller);
 
       try {
         const ws = socketRef.current || window.chatSocket;
         const payload = { message: trimmedText, receiver_id: receiverId };
         if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(payload));
       } catch { /* empty */ }
-
-      const token = getAuthToken();
-      if (token && receiverId) {
-        fetch(`${API_BASE}/chats/send/`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-          body: JSON.stringify({ message: trimmedText, receiver_id: receiverId }),
-        }).catch(() => {});
-      }
     }
-  }, [activeSeller, activeCustomer, receiverId]);
+  }, [activeSeller, activeCustomer, receiverId, markRead]);
 
   return (
     <ChatContext.Provider
@@ -356,9 +357,9 @@ export function ChatProvider({ children }) {
         isOpen, setIsOpen,
         activeSeller, setActiveSeller,
         activeCustomer, setActiveCustomer,
-        conversations, customerChats,
+        conversations, customerChats, unread,
         openChatWithSeller, openCustomerChat,
-        sendMessage,
+        sendMessage, markRead,
       }}
     >
       {children}

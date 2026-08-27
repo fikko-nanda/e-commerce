@@ -8,10 +8,17 @@ const productService = {
     return API.get('/products/', { params: query }).catch(() => ({ data: [] }));
   },
 
+  // Alias untuk kemudahan panggilan
+  getProducts: (params) => {
+    const query = typeof params === 'string' 
+      ? (params !== 'all' ? { category: params } : {}) 
+      : params;
+    return API.get('/products/', { params: query }).catch(() => ({ data: [] }));
+  },
+
   getById: (id) => API.get(`/products/${id}/`).catch(() => ({ data: null })),
   getDetail: (id) => API.get(`/products/${id}/`).catch(() => ({ data: null })),
 
-  // Ambil produk milik toko/seller yang sedang aktif login menggunakan endpoint ?mine=true
   getMyProducts: async () => {
     try {
       const res = await API.get('/products/?mine=true');
@@ -46,6 +53,7 @@ const productService = {
     }),
 
   delete: (id) => API.delete(`/products/${id}/`),
+  deleteProduct: (id) => API.delete(`/products/${id}/`),
 };
 
 export default productService;

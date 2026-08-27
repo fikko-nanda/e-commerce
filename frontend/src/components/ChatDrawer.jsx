@@ -11,8 +11,10 @@ export default function ChatDrawer() {
     setActiveCustomer,
     conversations,
     customerChats,
+    unread,
     openCustomerChat,
-    sendMessage 
+    sendMessage,
+    markRead
   } = useChat();
 
   const [input, setInput] = useState('');
@@ -35,7 +37,7 @@ export default function ChatDrawer() {
     return (
       <button
         onClick={() => setIsOpen(true)}
-        className="fixed bottom-6 right-6 z-40 bg-yellow-300 text-black font-black p-4 border-4 border-black shadow-brutal-lg hover:bg-black hover:text-yellow-300 transition uppercase text-xs flex items-center gap-2"
+        className="fixed bottom-6 right-6 z-40 bg-yellow-300 text-black font-black p-4 border-4 border-black shadow-brutal-lg hover:bg-black hover:text-yellow-300 transition uppercase text-xs flex items-center gap-2 cursor-pointer"
       >
         💬 <span>Pesan Seller</span>
       </button>
@@ -88,7 +90,7 @@ export default function ChatDrawer() {
           <div className="flex items-center gap-2">
             <button 
               onClick={handleBack}
-              className="bg-yellow-300 text-black font-black text-[10px] px-1.5 py-0.5 border border-black hover:bg-white"
+              className="bg-yellow-300 text-black font-black text-[10px] px-1.5 py-0.5 border border-black hover:bg-white cursor-pointer"
             >
               ←
             </button>
@@ -101,7 +103,7 @@ export default function ChatDrawer() {
         )}
         <button 
           onClick={() => setIsOpen(false)} 
-          className="bg-red-500 text-white font-black px-2 py-0.5 border border-white text-xs hover:bg-white hover:text-black"
+          className="bg-red-500 text-white font-black px-2 py-0.5 border border-white text-xs hover:bg-white hover:text-black cursor-pointer"
         >
           ✕
         </button>
@@ -125,9 +127,16 @@ export default function ChatDrawer() {
                       className="bg-white border-2 border-black p-3 shadow-brutal hover:bg-yellow-300 cursor-pointer transition flex justify-between items-center"
                     >
                       <div>
-                        <h4 className="font-black text-xs uppercase">👤 {custKey}</h4>
+                        <h4 className="font-black text-xs uppercase flex items-center gap-1.5">
+                          👤 {custKey}
+                          {unread[custKey] > 0 && (
+                            <span className="bg-red-500 text-white text-[9px] font-black px-1.5 py-0.5 border border-black leading-none">
+                              {unread[custKey]}
+                            </span>
+                          )}
+                        </h4>
                         <p className="text-[11px] font-bold text-gray-600 line-clamp-1 mt-0.5">
-                          {lastMsg ? lastMsg.text : 'Belum ada pesan'}
+                          {lastMsg ? (lastMsg.text || lastMsg.message) : 'Belum ada pesan'}
                         </p>
                       </div>
                       <span className="text-xs font-black">→</span>
@@ -142,13 +151,20 @@ export default function ChatDrawer() {
                   return (
                     <div
                       key={sellerName + (lastMsg?.id || '')}
-                      onClick={() => setActiveSeller(sellerName)}
+                      onClick={() => { setActiveSeller(sellerName); markRead(sellerName); }}
                       className="bg-white border-2 border-black p-3 shadow-brutal hover:bg-yellow-300 cursor-pointer transition flex justify-between items-center mb-2"
                     >
                       <div>
-                        <h4 className="font-black text-xs uppercase">🏪 {sellerName}</h4>
+                        <h4 className="font-black text-xs uppercase flex items-center gap-1.5">
+                          🏪 {sellerName}
+                          {unread[sellerName] > 0 && (
+                            <span className="bg-red-500 text-white text-[9px] font-black px-1.5 py-0.5 border border-black leading-none">
+                              {unread[sellerName]}
+                            </span>
+                          )}
+                        </h4>
                         <p className="text-[11px] font-bold text-gray-600 line-clamp-1 mt-0.5">
-                          {lastMsg ? lastMsg.text : 'Belum ada pesan'}
+                          {lastMsg ? (lastMsg.text || lastMsg.message) : 'Belum ada pesan'}
                         </p>
                       </div>
                       <span className="text-xs font-black">→</span>
@@ -165,13 +181,20 @@ export default function ChatDrawer() {
                 return (
                   <div
                     key={sellerName + (lastMsg?.id || '')}
-                    onClick={() => setActiveSeller(sellerName)}
+                    onClick={() => { setActiveSeller(sellerName); markRead(sellerName); }}
                     className="bg-white border-2 border-black p-3 shadow-brutal hover:bg-yellow-300 cursor-pointer transition flex justify-between items-center"
                   >
                     <div>
-                      <h4 className="font-black text-xs uppercase">🏪 {sellerName}</h4>
+                      <h4 className="font-black text-xs uppercase flex items-center gap-1.5">
+                        🏪 {sellerName}
+                        {unread[sellerName] > 0 && (
+                          <span className="bg-red-500 text-white text-[9px] font-black px-1.5 py-0.5 border border-black leading-none">
+                            {unread[sellerName]}
+                          </span>
+                        )}
+                      </h4>
                       <p className="text-[11px] font-bold text-gray-600 line-clamp-1 mt-0.5">
-                        {lastMsg ? lastMsg.text : 'Belum ada pesan'}
+                        {lastMsg ? (lastMsg.text || lastMsg.message) : 'Belum ada pesan'}
                       </p>
                     </div>
                     <span className="text-xs font-black">→</span>
@@ -184,18 +207,46 @@ export default function ChatDrawer() {
       ) : (
         <>
           <div className="flex-grow p-4 overflow-y-auto space-y-3 bg-gray-50">
-            {currentMessages.map((m, idx) => (
-              <div key={m.id || idx} className={`flex flex-col ${m.sender === 'user' ? 'items-end' : 'items-start'}`}>
-                <span className="text-[9px] font-black uppercase text-gray-500 mb-0.5">
-                  {m.sender === 'user' ? 'Anda' : (activeCustomer || activeSeller)}
-                </span>
-                <div className={`p-2.5 border-2 border-black max-w-[85%] text-xs font-bold shadow-brutal ${
-                  m.sender === 'user' ? 'bg-yellow-300 text-black' : 'bg-white text-black'
-                }`}>
-                  {m.text}
-                </div>
-              </div>
-            ))}
+            {(() => {
+              // Tentukan berapa pesan masuk terakhir yang belum dibaca (dot merah)
+              const threadKey = isInCustomerThread ? activeCustomer : activeSeller;
+              const unreadCount = (unread && unread[threadKey]) || 0;
+
+              const incomingIdxs = [];
+              currentMessages.forEach((m, i) => {
+                const mine = isInCustomerThread
+                  ? (m.sender === 'seller' || m.sender === 'store' || m.is_seller === true)
+                  : (m.sender === 'user' || m.is_me === true);
+                if (!mine) incomingIdxs.push(i);
+              });
+
+              const unreadStart = Math.max(0, incomingIdxs.length - unreadCount);
+              const unreadIndexSet = new Set(unreadStart < incomingIdxs.length ? incomingIdxs.slice(unreadStart) : []);
+
+              return currentMessages.map((m, idx) => {
+                // PEMISAHAN LOGIKA POSISI CHAT LOGIS
+                const isMe = isInCustomerThread
+                  ? (m.sender === 'seller' || m.sender === 'store' || m.is_seller === true)
+                  : (m.sender === 'user' || m.is_me === true);
+                const isUnread = !isMe && unreadIndexSet.has(idx);
+
+                return (
+                  <div key={m.id || idx} className={`flex flex-col ${isMe ? 'items-end text-right' : 'items-start text-left'}`}>
+                    <span className="text-[9px] font-black uppercase text-gray-500 mb-0.5 flex items-center gap-1">
+                      {isMe ? 'ANDA' : (activeCustomer || activeSeller)}
+                    </span>
+                    <div className={`relative p-2.5 border-2 border-black max-w-[85%] text-xs font-bold shadow-brutal ${
+                      isMe ? 'bg-yellow-300 text-black' : 'bg-white text-black'
+                    }`}>
+                      {isUnread && (
+                        <span className="absolute -left-2 top-1/2 -translate-y-1/2 w-2.5 h-2.5 bg-red-500 border border-black" />
+                      )}
+                      {m.text || m.message}
+                    </div>
+                  </div>
+                );
+              });
+            })()}
           </div>
           <form onSubmit={handleSend} className="p-2 bg-white border-t-4 border-black flex gap-2">
             <input
@@ -209,7 +260,7 @@ export default function ChatDrawer() {
             <button 
               type="submit" 
               disabled={!canSend}
-              className="bg-black text-white font-black px-4 py-2 border-2 border-black text-xs uppercase shadow-brutal hover:bg-yellow-300 hover:text-black transition disabled:opacity-50"
+              className="bg-black text-white font-black px-4 py-2 border-2 border-black text-xs uppercase shadow-brutal hover:bg-yellow-300 hover:text-black transition disabled:opacity-50 cursor-pointer"
             >
               Kirim
             </button>

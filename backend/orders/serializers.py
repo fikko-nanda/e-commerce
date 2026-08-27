@@ -24,9 +24,9 @@ class OrderDetailSerializer(serializers.ModelSerializer):
     product_name = serializers.ReadOnlyField(source='product.name')
     product_image = serializers.SerializerMethodField()
     store_name = serializers.ReadOnlyField(source='store.store_name')
-    buyer_email = serializers.ReadOnlyField(source='buyer.email')
-    buyer_username = serializers.ReadOnlyField(source='buyer.username')
-    buyer_address = serializers.ReadOnlyField(source='buyer.address')
+    buyer_email = serializers.ReadOnlyField(source='buyer.email', default=None)
+    buyer_username = serializers.ReadOnlyField(source='buyer.username', default=None)
+    buyer_address = serializers.ReadOnlyField(source='buyer.address', default=None)
 
     class Meta:
         model = Order
@@ -36,16 +36,20 @@ class OrderDetailSerializer(serializers.ModelSerializer):
             'quantity', 'total_price', 'payment_method', 'payment_status',
             'shipping_status', 'courier_name', 'tracking_number', 'created_at'
         ]
-        read_only_fields = fields
+        # Menggunakan tuple/list langsung dari field model untuk read_only_fields
+        read_only_fields = [
+            'id', 'buyer', 'store', 'product', 'quantity', 'total_price',
+            'payment_method', 'payment_status', 'shipping_status',
+            'courier_name', 'tracking_number', 'created_at'
+        ]
 
     def get_product_image(self, obj):
         try:
-            img = obj.product.image
-            if img and img.url:
+            if obj.product and obj.product.image and hasattr(obj.product.image, 'url'):
                 request = self.context.get('request')
                 if request:
-                    return request.build_absolute_uri(img.url)
-                return img.url
+                    return request.build_absolute_uri(obj.product.image.url)
+                return obj.product.image.url
         except Exception:
             return None
         return None

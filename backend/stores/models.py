@@ -14,6 +14,7 @@ class Store(models.Model):
     store_name = models.CharField(max_length=100, unique=True)
     phone = models.CharField(max_length=20)
     address = models.TextField()
+    logo = models.ImageField(upload_to='stores/', blank=True, null=True)
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING_REVIEW)
     created_at = models.DateTimeField(auto_now_add=True)
 

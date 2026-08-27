@@ -68,10 +68,7 @@ class CheckoutView(APIView):
                 server_key=settings.MIDTRANS_SERVER_KEY
             )
 
-            # Suffix timestamp agar order_id Midtrans unik setiap checkout
             midtrans_order_id = f"{order.id}-{int(time.time())}"
-
-            # Membaca FRONTEND_URL dari settings (default ke http://localhost:5173)
             frontend_url = getattr(settings, 'FRONTEND_URL', 'http://localhost:5173')
 
             param = {
@@ -79,7 +76,6 @@ class CheckoutView(APIView):
                     "order_id": midtrans_order_id,
                     "gross_amount": int(total_price)
                 },
-                # MENGARAHKAN USER KEMBALI KE HALAMAN PESANAN APPBAYARAN SELESAI
                 "callbacks": {
                     "finish": f"{frontend_url}/user/orders"
                 },
@@ -129,7 +125,6 @@ class MidtransWebhookView(APIView):
         transaction_status = data.get('transaction_status')
         fraud_status = data.get('fraud_status')
 
-        # Verifikasi signature key Midtrans
         raw_signature = f"{order_id}{status_code}{gross_amount}{settings.MIDTRANS_SERVER_KEY}"
         calc_signature = hashlib.sha512(raw_signature.encode('utf-8')).hexdigest()
 
@@ -167,7 +162,6 @@ class MyOrdersView(APIView):
     def get(self, request):
         orders = Order.objects.filter(buyer=request.user).select_related('store', 'product').order_by('-created_at')
 
-        # Auto-sync status ke Midtrans jika ada order yang masih PENDING
         if getattr(settings, 'MIDTRANS_SERVER_KEY', None):
             try:
                 snap = midtransclient.Snap(
@@ -223,7 +217,7 @@ class OrderDetailView(APIView):
 
 
 class UpdateShippingView(APIView):
-    """PATCH /orders/<id>/ship/ — seller update resi & status pengiriman."""
+    """PATCH /orders/<id>/ship/ — seller update resi & status pengiriman/pembayaran."""
     permission_classes = [permissions.IsAuthenticated]
 
     def patch(self, request, pk):
@@ -234,13 +228,24 @@ class UpdateShippingView(APIView):
         courier_name = request.data.get('courier_name')
         tracking_number = request.data.get('tracking_number')
         shipping_status = request.data.get('shipping_status')
+        payment_status = request.data.get('payment_status')
 
         if courier_name:
             order.courier_name = courier_name
         if tracking_number:
             order.tracking_number = tracking_number
-        if shipping_status in [Order.ShippingStatus.SHIPPED, Order.ShippingStatus.DELIVERED]:
+
+        # 1. Update status pengiriman
+        if shipping_status:
             order.shipping_status = shipping_status
+
+        # 2. Update status pembayaran jika seller menandai LUNAS
+        if payment_status:
+            order.payment_status = payment_status
+
+        # 3. Otomatis ubah payment_status menjadi PAID jika pesanan ditandai SELESAI/DELIVERED
+        if shipping_status in [Order.ShippingStatus.DELIVERED, 'SELESAI', 'completed']:
+            order.payment_status = Order.PaymentStatus.PAID
 
         order.save()
         return Response({'status': 'success', 'data': OrderDetailSerializer(order, context={'request': request}).data}, status=status.HTTP_200_OK)
@@ -304,13 +309,16 @@ class OrderPayView(APIView):
 
 
 class OrderPaySuccessView(APIView):
-    """POST /orders/<id>/success/ — Konfirmasi pembayaran COD (Midtrans dikonfirmasi via webhook)."""
+    """POST /orders/<id>/success/ — Konfirmasi pembayaran COD oleh Buyer/Seller."""
     permission_classes = [permissions.IsAuthenticated]
 
     def post(self, request, pk):
-        order = get_object_or_404(Order, pk=pk, buyer=request.user)
+        order = get_object_or_404(Order, pk=pk)
 
-        # Hanya COD yang bisa dikonfirmasi manual oleh buyer
+        # Mengizinkan Buyer atau Seller Toko untuk menandai lunas
+        if order.buyer != request.user and order.store.user != request.user:
+            return Response({'error': 'Anda tidak berhak mengakses pesanan ini.'}, status=status.HTTP_403_FORBIDDEN)
+
         if order.payment_method != Order.PaymentMethod.COD:
             return Response(
                 {'error': 'Pembayaran Midtrans dikonfirmasi otomatis oleh sistem.'},
@@ -320,6 +328,7 @@ class OrderPaySuccessView(APIView):
         if order.payment_status == Order.PaymentStatus.PENDING:
             order.payment_status = Order.PaymentStatus.PAID
             order.save()
+
         return Response({
             'status': 'success',
             'data': OrderDetailSerializer(order, context={'request': request}).data
