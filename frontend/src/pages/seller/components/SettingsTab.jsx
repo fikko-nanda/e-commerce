@@ -21,6 +21,11 @@ export default function SettingsTab({ storeInfo, setStoreInfo, handleSaveStore, 
       </div>
 
       <div>
+        <label className="block text-xs font-black uppercase mb-1">Nomor Telepon / WA</label>
+        <input type="text" value={storeInfo.phone} onChange={(e) => setStoreInfo({ ...storeInfo, phone: e.target.value })} placeholder="08123456789" className="w-full border-2 border-black p-2 font-bold text-xs" />
+      </div>
+
+      <div>
         <label className="block text-xs font-black uppercase mb-1">Deskripsi Toko</label>
         <textarea rows={3} value={storeInfo.description} onChange={(e) => setStoreInfo({ ...storeInfo, description: e.target.value })} className="w-full border-2 border-black p-2 font-bold text-xs" />
       </div>

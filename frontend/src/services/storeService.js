@@ -62,7 +62,7 @@ const storeService = {
   },
 
   updateMyStore: (formData) =>
-    API.put('/stores/me/', formData, {
+    API.patch('/stores/me/', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
     }),
 

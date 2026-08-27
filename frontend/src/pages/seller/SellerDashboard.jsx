@@ -100,6 +100,7 @@ export default function SellerDashboard() {
   const [storeInfo, setStoreInfo] = useState({
     name: user?.first_name ? `${user.first_name} Store` : 'Toko Saya',
     description: 'Penyedia streetwear & fashion lokal kualitas brutal.',
+    phone: user?.phone || '',
     logo: 'https://images.unsplash.com/photo-1560060141-7b9018741ced?w=400&auto=format&fit=crop&q=80',
     logoFile: null,
   });
@@ -155,6 +156,7 @@ export default function SellerDashboard() {
             ...prev,
             name: s.store_name || s.name || prev.name,
             description: s.address || s.description || prev.description,
+            phone: s.phone || prev.phone,
             logo: s.logo ? toAbsoluteUrl(s.logo) : s.image ? toAbsoluteUrl(s.image) : prev.logo,
           }));
 
@@ -239,9 +241,14 @@ export default function SellerDashboard() {
       const payload = new FormData();
       payload.append('store_name', storeInfo.name);
       payload.append('address', storeInfo.description);
+      if (storeInfo.phone) payload.append('phone', storeInfo.phone);
       if (storeInfo.logoFile) payload.append('logo', storeInfo.logoFile);
 
-      await (storeService.updateMyStore || storeService.updateStore)(payload);
+      const res = await (storeService.updateMyStore || storeService.updateStore)(payload);
+      const saved = res?.data?.store;
+      if (saved?.logo) {
+        setStoreInfo((prev) => ({ ...prev, logo: toAbsoluteUrl(saved.logo), logoFile: null }));
+      }
       showToast('Informasi Toko Berhasil Diperbarui!', 'success');
     } catch {
       showToast('Gagal memperbarui informasi toko.', 'error');

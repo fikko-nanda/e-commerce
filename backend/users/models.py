@@ -14,6 +14,7 @@ class User(AbstractUser):
     google_id = models.CharField(max_length=255, blank=True, null=True, unique=True)
     phone = models.CharField(max_length=20, blank=True, default='')
     address = models.TextField(blank=True, default='')
+    bio = models.TextField(blank=True, default='')
 
     USERNAME_FIELD = 'email'
     REQUIRED_FIELDS = ['username']
